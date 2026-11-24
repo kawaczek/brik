@@ -81,14 +81,90 @@
       gap: 32px;
       margin: 30px auto;
       align-items: start;
+      transition: all 0.3s ease;
     }
 
-    @media (max-width: 1050px) {
-      .lab-layout { grid-template-columns: 1fr; }
+    .lab-layout.scale-compact {
+      grid-template-columns: 580px 1fr;
+    }
+    .lab-layout.scale-compact .trimui-chassis {
+      width: 540px;
+    }
+
+    .lab-layout.scale-medium {
+      grid-template-columns: 800px 1fr;
+    }
+    .lab-layout.scale-medium .trimui-chassis {
+      width: 760px;
+    }
+
+    .lab-layout.scale-large {
+      grid-template-columns: 1fr;
+    }
+    .lab-layout.scale-large .trimui-chassis {
+      width: 1040px;
+      max-width: 98vw;
+    }
+
+    @media (max-width: 1150px) {
+      .lab-layout, .lab-layout.scale-medium, .lab-layout.scale-large { grid-template-columns: 1fr; }
+      .trimui-chassis { max-width: 100%; width: 100% !important; }
     }
 
     /* Left Console Column */
-    .console-col { display: flex; flex-direction: column; align-items: center; }
+    .console-col { display: flex; flex-direction: column; align-items: center; width: 100%; }
+
+    /* Display Scale Controller Bar */
+    .scale-selector-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      max-width: 1040px;
+      margin-bottom: 14px;
+      padding: 8px 14px;
+      background: rgba(14, 21, 34, 0.9);
+      border: 1px solid rgba(0, 240, 255, 0.25);
+      border-radius: 8px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    }
+    .scale-label {
+      color: var(--accent-amber);
+      font-weight: 700;
+      letter-spacing: 1px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .scale-btn-group {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .scale-btn {
+      background: #141f2d;
+      border: 1px solid #2d4158;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 5px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .scale-btn:hover {
+      color: #fff;
+      border-color: var(--accent-cyan);
+    }
+    .scale-btn.active {
+      background: rgba(0, 240, 255, 0.2);
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+      font-weight: 700;
+      box-shadow: 0 0 10px rgba(0, 240, 255, 0.35);
+    }
 
     .trimui-chassis {
       width: 540px;
@@ -98,6 +174,7 @@
       padding: 24px 20px 28px;
       box-shadow: 0 20px 50px rgba(0, 0, 0, 0.9), 0 0 20px rgba(0, 240, 255, 0.08);
       user-select: none;
+      transition: width 0.3s ease;
     }
 
     .bumper-bar {
@@ -126,6 +203,37 @@
       padding: 12px;
       box-shadow: inset 0 4px 12px rgba(0, 0, 0, 0.9);
       margin-bottom: 18px;
+      position: relative;
+    }
+
+    .screen-bezel:fullscreen {
+      padding: 0;
+      border: none;
+      border-radius: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+      width: 100vw;
+      height: 100vh;
+    }
+    .screen-bezel:fullscreen canvas {
+      max-width: 100vw;
+      max-height: 100vh;
+      width: auto;
+      height: 100vh;
+      aspect-ratio: 4 / 3;
+    }
+    .screen-bezel:fullscreen .screen-header-bar {
+      position: absolute;
+      top: 10px;
+      left: 20px;
+      right: 20px;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 6px 14px;
+      border-radius: 6px;
+      z-index: 10;
     }
 
     .screen-header-bar {
@@ -343,9 +451,19 @@
   </header>
 
   <main class="container">
-    <div class="lab-layout">
+    <div class="lab-layout scale-compact">
       <!-- LEFT: CONSOLE -->
       <div class="console-col">
+        <div class="scale-selector-bar">
+          <span class="scale-label">🔍 ROZMIAR EKRANU:</span>
+          <div class="scale-btn-group">
+            <button class="scale-btn active" data-scale="compact">1x (540px)</button>
+            <button class="scale-btn" data-scale="medium">1.4x (760px)</button>
+            <button class="scale-btn" data-scale="large">1:1 Natywny (1024px)</button>
+            <button class="scale-btn" id="btnFullscreen">⛶ Pełny Ekran</button>
+          </div>
+        </div>
+
         <div class="trimui-chassis">
           <div class="bumper-bar">
             <button class="bumper" id="btnL1">L1 // PREV</button>
@@ -357,7 +475,7 @@
               <span>🐍 PYODIDE WEBASSEMBLY DISPLAY</span>
               <span id="fpsBadge">60 FPS</span>
             </div>
-            <canvas id="wasmCanvas" width="640" height="480"></canvas>
+            <canvas id="wasmCanvas" width="1024" height="768"></canvas>
           </div>
 
           <div class="controls-panel">
@@ -494,6 +612,17 @@
           await pyodide.loadPackage("pillow");
         }
 
+        try {
+          const fontResp = await fetch("https://cdn.jsdelivr.net/fontsource/fonts/fira-code@latest/latin-500-normal.ttf");
+          if (fontResp.ok) {
+            const fontBuf = await fontResp.arrayBuffer();
+            pyodide.FS.writeFile("/default.ttf", new Uint8Array(fontBuf));
+            log("[+] Załadowano wektorową czcionkę TrueType Fira Code do Pyodide.");
+          }
+        } catch(fErr) {
+          log("[*] Używam domyślnej czcionki Pillow.");
+        }
+
         drawLoading("Wstrzykiwanie środowiska BrickDeck Core...");
 
         // Inject complete Core mocks and shims into Pyodide
@@ -531,7 +660,16 @@ if "flipper_proto" not in sys.modules:
 
 # 4. BrickDeck Core Engine Shims
 def get_font(size=14, bold=False):
-    return ImageFont.load_default()
+    import os
+    if os.path.exists("/default.ttf"):
+        try:
+            return ImageFont.truetype("/default.ttf", size)
+        except Exception:
+            pass
+    try:
+        return ImageFont.load_default(size=size)
+    except Exception:
+        return ImageFont.load_default()
 
 class Canvas:
     def __init__(self, width=1024, height=768):
@@ -802,7 +940,23 @@ py_canvas.image.tobytes("raw", "RGBA")
         try {
           pyodide.runPython(`
 if py_mod and hasattr(py_mod, 'handle_input'):
-    py_mod.handle_input("${key}")
+    raw_k = "${key}"
+    aliases = [raw_k]
+    if raw_k.startswith("KEY_"):
+        s = raw_k[4:]
+        aliases.extend([s, "BTN_" + s])
+    elif raw_k.startswith("BTN_"):
+        s = raw_k[4:]
+        aliases.extend([s, "KEY_" + s])
+    else:
+        aliases.extend(["KEY_" + raw_k, "BTN_" + raw_k])
+
+    for a in aliases:
+        try:
+            if py_mod.handle_input(a):
+                break
+        except Exception:
+            pass
 `);
         } catch (e) {}
       }
@@ -827,19 +981,63 @@ if py_mod and hasattr(py_mod, 'handle_input'):
     bindBtn('btnY', 'KEY_Y');
     bindBtn('btnL1', 'KEY_L1');
     bindBtn('btnR1', 'KEY_R1');
+    bindBtn('btnSelect', 'KEY_SELECT');
+    bindBtn('btnMenu', 'KEY_MENU');
+    bindBtn('btnStart', 'KEY_START');
 
     window.addEventListener('keydown', (e) => {
       if (['ArrowUp', 'KeyW'].includes(e.code)) sendKey('KEY_UP');
       if (['ArrowDown', 'KeyS'].includes(e.code)) sendKey('KEY_DOWN');
       if (['ArrowLeft', 'KeyA'].includes(e.code)) sendKey('KEY_LEFT');
       if (['ArrowRight', 'KeyD'].includes(e.code)) sendKey('KEY_RIGHT');
-      if (['KeyJ', 'Space'].includes(e.code)) sendKey('KEY_A');
-      if (['KeyK'].includes(e.code)) sendKey('KEY_B');
+      if (['KeyJ', 'Space', 'Enter'].includes(e.code)) sendKey('KEY_A');
+      if (['KeyK', 'Escape'].includes(e.code)) sendKey('KEY_B');
       if (['KeyU'].includes(e.code)) sendKey('KEY_X');
       if (['KeyI'].includes(e.code)) sendKey('KEY_Y');
-      if (['KeyQ'].includes(e.code)) sendKey('KEY_L1');
-      if (['KeyE'].includes(e.code)) sendKey('KEY_R1');
+      if (['KeyQ', 'Minus'].includes(e.code)) sendKey('KEY_L1');
+      if (['KeyE', 'Equal'].includes(e.code)) sendKey('KEY_R1');
     });
+
+    // 7. Display Scale Controls & Persistence
+    const layoutEl = document.querySelector('.lab-layout');
+    const scaleBtns = document.querySelectorAll('.scale-btn[data-scale]');
+
+    function setConsoleScale(scale) {
+      if (!layoutEl) return;
+      layoutEl.classList.remove('scale-compact', 'scale-medium', 'scale-large');
+      layoutEl.classList.add('scale-' + scale);
+      scaleBtns.forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-scale') === scale);
+      });
+      try {
+        localStorage.setItem('brik_wasm_scale', scale);
+      } catch (e) {}
+    }
+
+    scaleBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        setConsoleScale(btn.getAttribute('data-scale'));
+      });
+    });
+
+    const savedScale = localStorage.getItem('brik_wasm_scale') || 'compact';
+    setConsoleScale(savedScale);
+
+    const btnFs = document.getElementById('btnFullscreen');
+    if (btnFs) {
+      btnFs.addEventListener('click', () => {
+        const bezel = document.querySelector('.screen-bezel') || canvas;
+        if (!document.fullscreenElement) {
+          if (bezel.requestFullscreen) {
+            bezel.requestFullscreen();
+          } else if (canvas.requestFullscreen) {
+            canvas.requestFullscreen();
+          }
+        } else {
+          document.exitFullscreen();
+        }
+      });
+    }
 
     moduleSelect.addEventListener('change', (e) => {
       runModule(e.target.value);

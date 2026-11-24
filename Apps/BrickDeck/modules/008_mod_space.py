@@ -230,10 +230,10 @@ class SpaceWeatherModule(BaseModule):
         canvas.draw.text((bx + 16, by + 145), "GLOBALNY WPŁYW NA INFRASTRUKTURĘ:", fill=COLOR_TEXT_PRIMARY, font=get_font(12, bold=True))
 
         inf_items = [
-            ("📡 Łączność radiowa HF:", "STABILNA", COLOR_STATUS_OK),
-            ("🛰️ Nawigacja GPS / GNSS:", "DOKŁADNA (< 1.2m)", COLOR_STATUS_OK),
-            ("⚡ Sieci elektroenergetyczne:", "BEZ ZAGROŻEŃ GIC", COLOR_STATUS_OK),
-            ("👨‍🚀 Dawka dla astronautów:", "W NORMIE", COLOR_STATUS_OK)
+            ("● Łączność radiowa HF:", "STABILNA", COLOR_STATUS_OK),
+            ("● Nawigacja GPS / GNSS:", "DOKŁADNA (< 1.2m)", COLOR_STATUS_OK),
+            ("● Sieci elektroenergetyczne:", "BEZ ZAGROŻEŃ GIC", COLOR_STATUS_OK),
+            ("● Dawka dla astronautów:", "W NORMIE", COLOR_STATUS_OK)
         ]
         ix = bx + 16
         for label, val_str, col in inf_items:

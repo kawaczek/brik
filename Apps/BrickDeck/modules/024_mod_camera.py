@@ -77,7 +77,10 @@ class CameraModule(BaseModule):
         self.is_hardware_connected = False
 
         # Prepare captures directory
-        os.makedirs(CAPTURES_DIR, exist_ok=True)
+        try:
+            os.makedirs(CAPTURES_DIR, exist_ok=True)
+        except Exception:
+            pass
 
     def on_load(self):
         self.thread_running = True

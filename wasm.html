@@ -715,32 +715,115 @@ class Canvas:
         self.height = height
         self.image = Image.new("RGBA", (width, height), (10, 15, 24, 255))
         self.draw = ImageDraw.Draw(self.image)
+
     def clear(self, bg_color=(10, 15, 24, 255)):
         self.draw.rectangle([(0, 0), (self.width, self.height)], fill=bg_color)
+
     def draw_card(self, x, y, w, h, title="", subtitle="", border_color=(0, 200, 255), fill_color=(16, 24, 36), radius=8):
         self.draw.rounded_rectangle([(x, y), (x + w, y + h)], radius=radius, fill=fill_color, outline=border_color, width=2)
         if title:
             self.draw.text((x + 14, y + 12), title, fill=(240, 245, 255), font=get_font(15, bold=True))
         if subtitle:
             self.draw.text((x + 14, y + 36), subtitle, fill=(130, 160, 190), font=get_font(12))
+
     def draw_badge(self, x, y, text, bg_color=(30, 45, 65), text_color=(240, 245, 255)):
         bw = len(text) * 8 + 14
         self.draw.rounded_rectangle([(x, y), (x + bw, y + 24)], radius=4, fill=bg_color, outline=(0, 200, 255))
         self.draw.text((x + 6, y + 4), text, fill=text_color, font=get_font(11, bold=True))
-    def draw_gauge(self, x, y, w, h, val, max_val, label="", unit=""):
-        self.draw_card(x, y, w, h, title=label, subtitle=f"{val:.1f} {unit}")
-    def draw_radar(self, cx, cy, radius, sweep_angle, blips):
-        self.draw.ellipse([(cx-radius, cy-radius), (cx+radius, cy+radius)], outline=(0, 255, 180), width=2)
-    def draw_bar_chart(self, x, y, w, h, labels, values, max_v=None, title="", color=None):
-        self.draw_card(x, y, w, h, title=title)
-    def draw_spectrum(self, x, y, w, h, values, peaks=None, title="", col_start=None, col_end=None):
-        self.draw_card(x, y, w, h, title=title)
-    def draw_oscilloscope(self, x, y, w, h, points, color=None):
-        self.draw_card(x, y, w, h, title="OSCILLOSCOPE")
-    def draw_vu_meter(self, x, y, w, h, left, right):
-        self.draw_card(x, y, w, h, title="VU METER")
-    def draw_header(self, active_idx, modules, sys_info): pass
-    def draw_footer(self, hints): pass
+
+    def draw_gauge(self, x, y, w, h, value=0.0, max_val=100.0, label="", color=None, **kwargs):
+        val = kwargs.get('val', value)
+        max_v = kwargs.get('max_val', max_val)
+        lbl = kwargs.get('label', label)
+        col = kwargs.get('color', color) or (0, 240, 255)
+        ratio = max(0.0, min(1.0, float(val) / max(float(max_v), 0.001)))
+        self.draw.rounded_rectangle([(x, y), (x + w, y + h)], radius=max(2, h // 2), fill=(28, 34, 46))
+        fill_w = int(w * ratio)
+        if fill_w > 0:
+            self.draw.rounded_rectangle([(x, y), (x + max(fill_w, h // 2), y + h)], radius=max(2, h // 2), fill=col)
+        if lbl:
+            self.draw.text((x, y - 18), str(lbl), fill=(160, 180, 210), font=get_font(11))
+            val_text = f"{int(val)} / {int(max_v)}"
+            self.draw.text((x + w - len(val_text) * 8, y - 18), val_text, fill=(240, 245, 255), font=get_font(11))
+
+    def draw_radar(self, cx, cy, radius, sweep_angle, blips, **kwargs):
+        self.draw.ellipse([(cx - radius, cy - radius), (cx + radius, cy + radius)], outline=(0, 216, 255), width=2)
+        for r_pct in [0.25, 0.50, 0.75]:
+            cr = int(radius * r_pct)
+            self.draw.ellipse([(cx - cr, cy - cr), (cx + cr, cy + cr)], outline=(32, 64, 88), width=1)
+        self.draw.line([(cx - radius, cy), (cx + radius, cy)], fill=(32, 64, 88), width=1)
+        self.draw.line([(cx, cy - radius), (cx, cy + radius)], fill=(32, 64, 88), width=1)
+        rad = math.radians(sweep_angle)
+        sx = cx + int(radius * math.cos(rad))
+        sy = cy + int(radius * math.sin(rad))
+        self.draw.line([(cx, cy), (sx, sy)], fill=(0, 240, 255), width=2)
+        for b in blips:
+            b_rad = math.radians(b.get('angle', 0))
+            b_dist = max(0.1, min(0.95, b.get('dist', 0.5))) * radius
+            bx = cx + int(b_dist * math.cos(b_rad))
+            by = cy + int(b_dist * math.sin(b_rad))
+            self.draw.ellipse([(bx - 4, by - 4), (bx + 4, by + 4)], fill=(255, 170, 0))
+
+    def draw_bar_chart(self, x, y, w, h, labels, values, max_val=None, active_idx=-1, bar_color=None, **kwargs):
+        max_v = max_val if max_val is not None else kwargs.get('max_v', 100.0)
+        col = bar_color or kwargs.get('color') or (0, 240, 255)
+        num_bars = len(values)
+        if num_bars > 0:
+            bar_width = max(6, (w - (num_bars * 6)) // num_bars)
+            self.draw.line([(x, y + h), (x + w, y + h)], fill=(40, 60, 85), width=1)
+            cur_x = x
+            for i, val in enumerate(values):
+                ratio = max(0.0, min(1.0, float(val) / max(float(max_v), 1.0)))
+                bar_h = int(h * ratio)
+                bar_y = y + h - bar_h
+                bcol = (255, 170, 0) if i == active_idx else col
+                if bar_h > 0:
+                    self.draw.rectangle([(cur_x, bar_y), (cur_x + bar_width, y + h)], fill=bcol)
+                if i < len(labels):
+                    self.draw.text((cur_x, y + h + 4), str(labels[i])[:4], fill=(160, 180, 210), font=get_font(10))
+                cur_x += bar_width + 6
+
+    def draw_spectrum(self, x, y, w, h, values, peaks=None, bar_color=None, peak_color=None, **kwargs):
+        b_col = bar_color or kwargs.get('color') or (0, 240, 255)
+        p_col = peak_color or (255, 170, 0)
+        num_bars = len(values)
+        if num_bars > 0:
+            bar_width = max(2, (w - (num_bars * 2)) // num_bars)
+            cur_x = x
+            for i, val in enumerate(values):
+                norm = max(0.0, min(1.0, float(val)))
+                bh = int(h * norm)
+                if bh > 0:
+                    self.draw.rectangle([(cur_x, y + h - bh), (cur_x + bar_width, y + h)], fill=b_col)
+                cur_x += bar_width + 2
+
+    def draw_oscilloscope(self, x, y, w, h, points, color=None, **kwargs):
+        col = color or (0, 255, 136)
+        self.draw.rectangle([(x, y), (x + w, y + h)], fill=(10, 16, 12), outline=(20, 48, 28), width=1)
+        mid_y = y + h // 2
+        self.draw.line([(x, mid_y), (x + w, mid_y)], fill=(18, 40, 24), width=1)
+        if len(points) >= 2:
+            step = w / max(1, len(points) - 1)
+            for i in range(len(points) - 1):
+                x1 = int(x + i * step)
+                y1 = int(mid_y + points[i] * (h // 2 - 6))
+                x2 = int(x + (i + 1) * step)
+                y2 = int(mid_y + points[i + 1] * (h // 2 - 6))
+                self.draw.line([(x1, y1), (x2, y2)], fill=col, width=2)
+
+    def draw_vu_meter(self, x, y, w, h, left_db=0.0, right_db=0.0, **kwargs):
+        ldb = kwargs.get('left', left_db)
+        rdb = kwargs.get('right', right_db)
+        ch_h = max(4, (h - 8) // 2)
+        for idx, val in enumerate([ldb, rdb]):
+            cy = y + idx * (ch_h + 8)
+            norm = max(0.0, min(1.0, (float(val) + 40.0) / 46.0))
+            self.draw.rectangle([(x, cy), (x + w, cy + ch_h)], fill=(20, 24, 32), outline=(40, 60, 85))
+            if norm > 0:
+                self.draw.rectangle([(x, cy), (x + int(w * norm), cy + ch_h)], fill=(0, 240, 255))
+
+    def draw_header(self, active_idx=0, modules=None, sys_info=None): pass
+    def draw_footer(self, hints=None): pass
 
 class BaseModule:
     def __init__(self, app_context=None):
@@ -788,15 +871,27 @@ class MockI18n:
 i_mod.i18n = MockI18n()
 
 qr_mod = types.ModuleType("core.qr_engine")
-qr_mod.generate_qr_matrix = lambda *args, **kwargs: [[1 if (x+y)%2==0 else 0 for x in range(25)] for y in range(25)]
+qr_mod.generate_qr_matrix = lambda *args, **kwargs: ([[1 if (x+y)%2==0 else 0 for x in range(25)] for y in range(25)], 1)
 qr_mod.generate_code128 = lambda *args, **kwargs: "10101100110"
-qr_mod.generate_ean13 = lambda *args, **kwargs: "10100011010"
+qr_mod.generate_ean13 = lambda *args, **kwargs: ("10100011010", "1234567890128")
 
 surv_mod = types.ModuleType("core.survival_engine")
 class MockSurvival:
-    def get_categories(self): return ["Woda", "Ogien", "Schronienie", "Apteczka"]
-    def get_articles_by_category(self, cat): return [{"id": "1", "title": "Uzdatnianie wody", "desc": "Gotowanie i filtry"}]
-    def get_article(self, aid): return {"title": "Uzdatnianie wody", "content": "Gotuj wode minimum 3 minuty."}
+    def __init__(self, *args, **kwargs):
+        self.categories = [
+            {"id": "water", "name": "Woda & Filtracja", "icon": "💧", "badge": "PRIORYTET #1", "color": [0, 210, 255]},
+            {"id": "fire", "name": "Ogień & Ciepło", "icon": "🔥", "badge": "SURVIVAL", "color": [255, 140, 0]},
+            {"id": "shelter", "name": "Schronienie", "icon": "⛺", "badge": "BAZA", "color": [0, 255, 136]},
+            {"id": "medical", "name": "Pierwsza Pomoc", "icon": "🩹", "badge": "MEDYK", "color": [255, 60, 60]}
+        ]
+        self.guides = [
+            {"id": "water_purif", "category": "water", "title": "Uzdatnianie wody w terenie", "desc": "Metoda SODIS, gotowanie i filtr węglowy.", "body": "1. Gotuj wodę min. 3 minuty.\n2. Użyj filtra piaskowo-węglowego.\n3. Tabletki z chlorem."},
+            {"id": "fire_bow", "category": "fire", "title": "Łuk ogniowy i krzesiwo", "desc": "Rozpalanie ognia bez zapałek.", "body": "Użyj suchego hubki i krzesiwa magnezowego."}
+        ]
+    def get_categories(self): return self.categories
+    def get_guides_for_category(self, cat_id): return [g for g in self.guides if g.get("category") == cat_id] or self.guides
+    def get_articles_by_category(self, cat_id): return self.get_guides_for_category(cat_id)
+    def get_article(self, aid): return self.guides[0]
 surv_mod.SurvivalEngine = MockSurvival
 
 core_pkg = types.ModuleType("core")

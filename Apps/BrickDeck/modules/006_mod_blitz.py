@@ -244,7 +244,7 @@ class BlitzModule(BaseModule):
                                       fill=(24, 18, 20) if self.nearest_strike_km < 25 else (20, 28, 40),
                                       outline=COLOR_STATUS_ERR if self.nearest_strike_km < 25 else COLOR_BORDER, width=1)
 
-        alert_title = "⚠️ BLISKA BURZA!" if self.nearest_strike_km < 25 else "ODLEGŁOŚĆ WYŁADOWAŃ"
+        alert_title = "⚡ BLISKA BURZA!" if self.nearest_strike_km < 25 else "ODLEGŁOŚĆ WYŁADOWAŃ"
         alert_col = COLOR_STATUS_ERR if self.nearest_strike_km < 25 else COLOR_CYBER_CYAN
         canvas.draw.text((px + 28, py + 128), alert_title, fill=alert_col, font=get_font(12, bold=True))
         canvas.draw.text((px + 28, py + 152), f"{self.nearest_strike_km:.1f} km", fill=COLOR_TEXT_PRIMARY, font=get_font(26, bold=True))

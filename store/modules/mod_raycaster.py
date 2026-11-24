@@ -406,22 +406,23 @@ class RaycasterModule(BaseModule):
         draw.text((sx + 40, sy + sh - 52), "D-Pad: Wybór opcji i zmiana | [Y] lub [B]: Zamknij menu", fill=(0, 255, 140), font=get_font(13, bold=True))
 
     def handle_input(self, event: str) -> bool:
-        if event == "KEY_Y":
+        # Settings Toggle & Dismiss
+        if event in ("KEY_Y", "BTN_Y", "y", "Y"):
             self.show_settings = not self.show_settings
             return True
-        elif event == "KEY_B" and self.show_settings:
+        elif (event in ("KEY_B", "BTN_B", "b", "B")) and self.show_settings:
             self.show_settings = False
             return True
 
         if self.show_settings:
-            if event == "KEY_UP":
+            if event in ("KEY_UP", "UP", "w", "W"):
                 self.settings_cursor = (self.settings_cursor - 1) % len(self.settings_items)
                 return True
-            elif event == "KEY_DOWN":
+            elif event in ("KEY_DOWN", "DOWN", "s", "S"):
                 self.settings_cursor = (self.settings_cursor + 1) % len(self.settings_items)
                 return True
-            elif event in ("KEY_LEFT", "KEY_RIGHT"):
-                delta = 1 if event == "KEY_RIGHT" else -1
+            elif event in ("KEY_LEFT", "LEFT", "KEY_RIGHT", "RIGHT", "a", "d", "A", "D"):
+                delta = 1 if event in ("KEY_RIGHT", "RIGHT", "d", "D") else -1
                 if self.settings_cursor == 0: # Font scale
                     self.font_scale_idx = (self.font_scale_idx + delta) % len(self.font_scales)
                 elif self.settings_cursor == 1: # Minimap mode
@@ -433,31 +434,43 @@ class RaycasterModule(BaseModule):
                 return True
             return False
 
-        # Gameplay hotkeys
-        if event in ("KEY_UP", "KEY_W"):
-            self.keys_held["UP"] = not self.keys_held["UP"]
+        # Gameplay Direct Movement & Actions
+        if event in ("KEY_UP", "UP", "KEY_W", "w", "W"):
+            spd = 0.35 * (1.8 if self.keys_held["SPRINT"] else 1.0)
+            dx = math.cos(self.angle) * spd
+            dy = math.sin(self.angle) * spd
+            if MAZE_MAP[int(self.py) * MAP_W + int(self.px + dx)] == 0:
+                self.px += dx
+            if MAZE_MAP[int(self.py + dy) * MAP_W + int(self.px)] == 0:
+                self.py += dy
             return True
-        elif event in ("KEY_DOWN", "KEY_S"):
-            self.keys_held["DOWN"] = not self.keys_held["DOWN"]
+        elif event in ("KEY_DOWN", "DOWN", "KEY_S", "s", "S"):
+            spd = 0.35 * (1.8 if self.keys_held["SPRINT"] else 1.0)
+            dx = math.cos(self.angle) * spd
+            dy = math.sin(self.angle) * spd
+            if MAZE_MAP[int(self.py) * MAP_W + int(self.px - dx)] == 0:
+                self.px -= dx
+            if MAZE_MAP[int(self.py - dy) * MAP_W + int(self.px)] == 0:
+                self.py -= dy
             return True
-        elif event in ("KEY_LEFT", "KEY_A"):
-            self.keys_held["LEFT"] = not self.keys_held["LEFT"]
+        elif event in ("KEY_LEFT", "LEFT", "KEY_A", "a", "A"):
+            self.angle = (self.angle - 0.22) % (2.0 * math.pi)
             return True
-        elif event in ("KEY_RIGHT", "KEY_D"):
-            self.keys_held["RIGHT"] = not self.keys_held["RIGHT"]
+        elif event in ("KEY_RIGHT", "RIGHT", "KEY_D", "d", "D"):
+            self.angle = (self.angle + 0.22) % (2.0 * math.pi)
             return True
-        elif event == "KEY_B":
+        elif event in ("KEY_B", "BTN_B", "b", "B"):
             self.keys_held["SPRINT"] = not self.keys_held["SPRINT"]
             return True
-        elif event == "KEY_X":
+        elif event in ("KEY_X", "BTN_X", "x", "X"):
             # Cycle through map modes directly: Compact -> Large -> Fullscreen -> Off
             self.minimap_mode_idx = (self.minimap_mode_idx + 1) % len(self.minimap_modes)
             return True
-        elif event == "KEY_L1":
+        elif event in ("KEY_L1", "BTN_L1", "l1", "q", "Q"):
             # Zoom out
             self.minimap_zoom_idx = max(0, self.minimap_zoom_idx - 1)
             return True
-        elif event == "KEY_R1":
+        elif event in ("KEY_R1", "BTN_R1", "r1", "e", "E"):
             # Zoom in
             self.minimap_zoom_idx = min(len(self.minimap_zoom_levels) - 1, self.minimap_zoom_idx + 1)
             return True

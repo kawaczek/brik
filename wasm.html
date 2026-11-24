@@ -404,8 +404,9 @@
             <option value="">Ładowanie listy modułów...</option>
           </select>
 
-          <div style="display:flex; gap:10px; margin-bottom:14px;">
+          <div style="display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
             <button id="btnReload" class="btn-action">🔄 Załaduj i Odpal .py</button>
+            <button id="btnCopyWasmLink" class="btn-action" style="background:#1e293b; color:var(--accent-cyan); border:1px solid var(--accent-cyan);">🔗 Kopiuj Link do gry</button>
             <a id="btnDownloadPy" href="#" download class="btn-action" style="background:#1e293b; color:#fff; border:1px solid #334155;">💾 Pobierz czysty .py</a>
           </div>
 
@@ -448,7 +449,9 @@
 
     let pyodide = null;
     let isReady = false;
-    let currentModId = "mod_raycaster";
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialModId = urlParams.get('app') || window.location.hash.replace('#', '') || "mod_raycaster";
+    let currentModId = initialModId;
     let offscreenCanvas = document.createElement('canvas');
     offscreenCanvas.width = 1024;
     offscreenCanvas.height = 768;
@@ -645,7 +648,7 @@ py_mod = None
         isReady = true;
 
         await loadModuleCatalog();
-        await runModule("mod_raycaster");
+        await runModule(currentModId);
       } catch (e) {
         log("[-] Błąd inicjalizacji: " + e.message);
         runtimeStatus.textContent = "Błąd inicjalizacji";
@@ -665,7 +668,12 @@ py_mod = None
             opt.textContent = `${m.name} [${m.category}]`;
             moduleSelect.appendChild(opt);
           });
-          moduleSelect.value = currentModId;
+          if (data.modules.some(m => m.id === currentModId)) {
+            moduleSelect.value = currentModId;
+          } else {
+            moduleSelect.value = "mod_raycaster";
+            currentModId = "mod_raycaster";
+          }
         }
       } catch (e) {
         log("[-] Nie udało się wczytać registry.json: " + e.message);
@@ -676,6 +684,13 @@ py_mod = None
     async function runModule(modId) {
       if (!isReady) return;
       currentModId = modId;
+      if (moduleSelect.value !== modId) {
+        moduleSelect.value = modId;
+      }
+      try {
+        const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?app=' + modId;
+        window.history.replaceState({ path: newUrl }, '', newUrl);
+      } catch(e) {}
       log(`[*] Pobieranie ${modId}.py...`);
 
       let code = "";
@@ -826,6 +841,23 @@ if py_mod and hasattr(py_mod, 'handle_input'):
 
     document.getElementById('btnReload').addEventListener('click', () => {
       runModule(moduleSelect.value || currentModId);
+    });
+
+    document.getElementById('btnCopyWasmLink').addEventListener('click', () => {
+      const shareUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?app=' + currentModId;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(shareUrl).then(() => {
+          log(`[+] Skopiowano bezpośredni link: ${shareUrl}`);
+          const btn = document.getElementById('btnCopyWasmLink');
+          const orig = btn.innerHTML;
+          btn.innerHTML = "✅ Skopiowano link!";
+          setTimeout(() => { btn.innerHTML = orig; }, 2000);
+        }).catch(() => {
+          prompt("Skopiuj bezpośredni link do tej gry:", shareUrl);
+        });
+      } else {
+        prompt("Skopiuj bezpośredni link do tej gry:", shareUrl);
+      }
     });
 
     initWasm();

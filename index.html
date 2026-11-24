@@ -1303,6 +1303,10 @@
       currentDemo = e.target.value;
       currentModuleIdx = allModules.findIndex(m => m.id === currentDemo);
       isLauncherOpen = false;
+      try {
+        const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?play=' + currentDemo;
+        window.history.replaceState({ path: newUrl }, '', newUrl);
+      } catch(err) {}
     });
 
     // Public helper to launch any app from store buttons
@@ -1311,7 +1315,30 @@
       demoSelect.value = modId;
       currentModuleIdx = allModules.findIndex(m => m.id === modId);
       isLauncherOpen = false;
+      try {
+        const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?play=' + modId;
+        window.history.replaceState({ path: newUrl }, '', newUrl);
+      } catch(err) {}
       document.getElementById('demo').scrollIntoView({ behavior: 'smooth' });
+    };
+
+    // Public helper to copy direct deep link
+    window.copyDirectLink = function(modId, e) {
+      const shareUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?play=' + modId;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(shareUrl).then(() => {
+          if (e && e.target) {
+            const orig = e.target.innerHTML;
+            e.target.innerHTML = "✅ Skopiowano!";
+            setTimeout(() => { e.target.innerHTML = orig; }, 2000);
+          }
+          triggerButtonToast("LINK SKOPIOWANY DO SCHOWKA");
+        }).catch(() => {
+          prompt("Skopiuj bezpośredni link:", shareUrl);
+        });
+      } else {
+        prompt("Skopiuj bezpośredni link:", shareUrl);
+      }
     };
 
     // Cycle modules with L1 / R1
@@ -1319,6 +1346,10 @@
       currentModuleIdx = (currentModuleIdx + delta + allModules.length) % allModules.length;
       currentDemo = allModules[currentModuleIdx].id;
       demoSelect.value = currentDemo;
+      try {
+        const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?play=' + currentDemo;
+        window.history.replaceState({ path: newUrl }, '', newUrl);
+      } catch(err) {}
       triggerButtonToast(delta > 0 ? "R1 // DALEJ" : "L1 // WRÓĆ");
     }
 
@@ -1455,12 +1486,22 @@
               <span>v${m.version || '1.0'}</span>
             </div>
             <div class="card-actions" style="display:flex; flex-direction:column; gap:8px;">
-              <button onclick="launchInSimulator('${m.id}')" class="card-btn" style="background:var(--accent-purple); color:#fff; border-color:var(--accent-purple);">
-                🎮 Zagraj w Symulatorze
-              </button>
-              <a href="${m.download_url}" download="${m.id}.py" class="card-btn">
-                Pobierz ${m.id}.py
-              </a>
+              <div style="display:flex; gap:8px;">
+                <button onclick="launchInSimulator('${m.id}')" class="card-btn" style="flex:1; background:var(--accent-purple); color:#fff; border-color:var(--accent-purple);">
+                  🎮 Zagraj
+                </button>
+                <a href="wasm.html?app=${m.id}" class="card-btn" style="flex:1; background:rgba(255,170,0,0.15); color:var(--accent-amber); border-color:var(--accent-amber); text-align:center;">
+                  🐍 WASM
+                </a>
+              </div>
+              <div style="display:flex; gap:8px;">
+                <button onclick="copyDirectLink('${m.id}', event)" class="card-btn" style="flex:1; font-size:12px; background:#141e30; color:var(--text-muted); border-color:#2a3a50;">
+                  🔗 Kopiuj Link
+                </button>
+                <a href="${m.download_url}" download="${m.id}.py" class="card-btn" style="flex:1; font-size:12px; text-align:center;">
+                  💾 Pobierz .py
+                </a>
+              </div>
             </div>
           </div>
         `;
@@ -1476,7 +1517,18 @@
       });
     });
 
-    loadModules();
+    loadModules().then(() => {
+      // Check URL query param ?play=... or ?app=... or hash #...
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const targetApp = urlParams.get('play') || urlParams.get('app') || window.location.hash.replace('#', '');
+        if (targetApp && allModules.some(m => m.id === targetApp)) {
+          setTimeout(() => {
+            launchInSimulator(targetApp);
+          }, 200);
+        }
+      } catch(e) {}
+    });
   </script>
 </body>
 </html>

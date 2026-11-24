@@ -1,0 +1,46 @@
+{
+    "id": "water_01_purification",
+    "category": "water",
+    "title": "Warstwowy filtr węglowy i dezynfekcja wody",
+    "badge": "FILTRACJA & SODIS",
+    "priority": "HIGH",
+    "author": "BrickDeck Survival Corps",
+    "tags": ["woda", "filtr", "węgiel", "gotowanie", "sodis", "jodyna"],
+    "sections": [
+        {
+            "heading": "ZASADA DZIAŁANIA I ZAPOTRZEBOWANIE",
+            "type": "header",
+            "lines": [
+                "Człowiek potrzebuje minimum 2-3 litrów wody dziennie do zachowania funkcji życiowych.",
+                "Picie mętnej, surowej wody z kałuży lub rzeki grozi czerwonką, cholerą i rotawirusami.",
+                "Zasada 2 etapów: 1. Filtracja mechaniczna (usunięcie mętności), 2. Dezynfekcja biologiczna."
+            ]
+        },
+        {
+            "heading": "KROK 1: WARSTWOWY FILTR WĘGLOWY (BUTELKA PET)",
+            "type": "step",
+            "lines": [
+                "1. Odetnij dno plastikowej butelki 1.5L lub 2L. W nakrętce zrób 3 małe dziurki gwoździem.",
+                "2. Na dno szyjki połóż kawałek czystej bawełny, gazy lub waty kosmetycznej.",
+                "3. WARSTWA 1 (KLUCZOWA): Wsyp 5-7 cm POKRUSZONEGO WĘGLA DRZEWNEGO z ogniska.",
+                "   Węgiel drzewny jest mikroporowaty i adsorbuje toksyny chemiczne, pestycydy i zapachy.",
+                "4. WARSTWA 2: Wsyp 5 cm drobnego, czystego piasku rzecznego (filtr mikro-zawiesin).",
+                "5. WARSTWA 3: Wsyp 4 cm drobnego żwiru i kamyków na samej górze.",
+                "6. Przepuść wodę przez filtr 2-3 razy, aż wylatująca ciecz będzie krystalicznie przezroczysta."
+            ]
+        },
+        {
+            "heading": "KROK 2: DEZYNFEKCJA BIOLOGICZNA (NISZCZENIE BAKTERII)",
+            "type": "warn",
+            "lines": [
+                "UWAGA: Przefiltrowana woda jest klarowna, ale nadal zawiera bakterie i wirusy!",
+                "Wybierz jedną z 3 poniższych metod dezynfekcji:",
+                "• GOTOWANIE: Doprowadź wodę do burzliwego wrzenia przez minimum 1-3 minuty (najpewniejsza metoda).",
+                "• METODA SODIS (SŁONECZNA UV): Nalej klarowną wodę do przezroczystej butelki PET.",
+                "  Połóż butelkę poziomo na blaszanym dachu lub folii aluminiowej na pełnym słońcu na minimum 6 godzin.",
+                "  Promieniowanie ultrafioletowe UV-A penetruje wodę i niszczy DNA patogenów.",
+                "• JODYNA APTECZNA: 3-5 kropli 2% jodyny na 1 litr wody. Wymieszaj i odczekaj 30 minut."
+            ]
+        }
+    ]
+}

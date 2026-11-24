@@ -1,0 +1,38 @@
+{
+    "id": "firstaid_01_who_ors",
+    "category": "firstaid",
+    "title": "Domowe elektrolity ratunkowe (Formuła WHO ORS)",
+    "badge": "REHYDRATACJA",
+    "priority": "HIGH",
+    "author": "BrickDeck Survival Corps",
+    "tags": ["medycyna", "elektrolity", "ors", "who", "cukier", "sól", "biegunka", "odwodnienie"],
+    "sections": [
+        {
+            "heading": "DLACZEGO CZYSTA WODA NIE WYSTARCZA W ODWODNIENIU?",
+            "type": "header",
+            "lines": [
+                "Podczas biegunki, wymiotów, gorączki czy wysiłku w upale organizm traci nie tylko wodę, ale głównie sód i potas.",
+                "Picie samej czystej wody w stanie odwodnienia wypłukuje resztki elektrolitów z krwi,",
+                "prowadząc do hiponatremii, obrzęku mózgu, drgawek i zatrzymania krążenia.",
+                "Cząsteczki glukozy (cukru) otwierają biologiczne pompy sodowo-potasowe w nabłonku jelit,",
+                "zmuszając komórki do natychmiastowego wchłaniania wody do krwiobiegu."
+            ]
+        },
+        {
+            "heading": "OFICJALNY PRZEPIS WHO NA 1 LITR CZYSTEJ PRZEGOTOWANEJ WODY",
+            "type": "step",
+            "lines": [
+                "• 1 LITR czystej, przegotowanej wody (lub ostudzonej herbaty).",
+                "• 6 PŁASKICH ŁYŻECZEK CUKRU (lub miodu) - źródło glukozy.",
+                "• 1/2 PŁASKIEJ ŁYŻECZKI SOLI KUCHENNEJ - chlorek sodu (NaCl).",
+                "• (Opcjonalnie) 1/2 szklanki świeżego soku z pomarańczy lub cytryny - uzupełnia potas.",
+                "",
+                "SPOSÓB PODAWANIA:",
+                "• Roztwór podawaj małymi łykami lub łyżeczką co 5-10 minut.",
+                "• Wypicie 1 litra na raz wywoła odruch wymiotny i pogorszy odwodnienie!",
+                "• Dorośli: 1 litr w ciągu pierwszych 4 godzin, następnie 250 ml po każdym wypróżnieniu.",
+                "• Dzieci: 50-100 ml co godzinę."
+            ]
+        }
+    ]
+}

@@ -1,0 +1,46 @@
+{
+    "id": "fire_01_without_matches",
+    "category": "fire",
+    "title": "Rozpalanie ognia bez zapałek i zapalniczki",
+    "badge": "OGIEŃ AWARYJNY",
+    "priority": "HIGH",
+    "author": "BrickDeck Survival Corps",
+    "tags": ["ogień", "bateria", "wełna stalowa", "sreberko", "krzesiwo", "hubka"],
+    "sections": [
+        {
+            "heading": "TRÓJKĄT OGNIA I PRZYGOTOWANIE HUBKI",
+            "type": "header",
+            "lines": [
+                "Ogień potrzebuje 3 elementów: Paliwa, Tlenu i Energii zapłonu (Ciepła).",
+                "NIGDY NIE ZACZYNAJ ODPALANIA bez przygotowanej suchej hubki (tinder bundle)!",
+                "Najlepsza hubka natychmiastowa: waciki bawełniane nasączone wazeliną (palą się 5-8 minut!),",
+                "roztarta sucha kora brzozy (zawiera palną betulinę), suchy puch z pałki wodnej lub suchy mech."
+            ]
+        },
+        {
+            "heading": "METODA 1: BATERIA 9V / AA + WEŁNA STALOWA (DRUCIAK)",
+            "type": "step",
+            "lines": [
+                "• ZASADA: Cienkie włókna wełny stalowej (druciak do mycia naczyń, gradacja 00 lub 000) mają",
+                "  duży opór elektryczny. Prąd zwarcia z baterii natychmiast rozgrzewa stal powyżej 700°C.",
+                "1. Uformuj luźne gniazdo z suchej trawy lub waty i włóż w środek mały kłębek wełny stalowej.",
+                "2. Dotknij biegunów baterii 9V do włókien wełny (lub zewrzyj baterię AA/18650 przewodem przez wełnę).",
+                "3. Włókna natychmiast rozbłysną czerwonym żarem.",
+                "4. Dmuchaj delikatnie i jednostajnie, aż żar przeniesie się na hubkę i pojawi się płomień."
+            ]
+        },
+        {
+            "heading": "METODA 2: BATERIA Z TELEFONU + PAPIEREK PO GUMIE DO ŻUCIA",
+            "type": "step",
+            "lines": [
+                "• ZASADA: Papierowo-aluminiowe sreberko (z gumy Orbit lub tabliczki czekolady) przewodzi prąd.",
+                "1. Wytnij pasek sreberka o długości 8 cm i szerokości 1.5 cm.",
+                "2. Na samym środku paska wytnij nożyczkami wąskie przewężenie o szerokości zaledwie 1.5 - 2 mm.",
+                "3. Przygotuj obok suchy wacik lub rozdrobniony papier.",
+                "4. Chwyć końce paska i dociśnij je stroną aluminiową do biegunów (+) i (-) baterii telefonu lub ogniwa 18650.",
+                "5. W przewężeniu powstaje ogromna gęstość prądu – mostek spala się jasnym płomieniem w 0.2 sekundy!",
+                "6. Natychmiast podpal nim przygotowaną hubkę."
+            ]
+        }
+    ]
+}

@@ -1,0 +1,85 @@
+{
+    "description": "Kategorie bazy wiedzy survivalowej i off-grid BrickDeck OS",
+    "categories": [
+        {
+            "id": "water",
+            "name": "Woda & Filtracja",
+            "name_en": "Water & Purification",
+            "icon": "💧",
+            "badge": "PRIORYTET #1",
+            "color": [0, 210, 255]
+        },
+        {
+            "id": "power",
+            "name": "Energia & Zasilanie",
+            "name_en": "Off-Grid Power",
+            "icon": "⚡",
+            "badge": "ENERGIA OFF-GRID",
+            "color": [255, 170, 0]
+        },
+        {
+            "id": "shelter",
+            "name": "Schronienie & Zima",
+            "name_en": "Shelter & Winter",
+            "icon": "🏕️",
+            "badge": "TERMIKA & MIKROKLIMAT",
+            "color": [0, 230, 118]
+        },
+        {
+            "id": "fire",
+            "name": "Ogień & Ciepło",
+            "name_en": "Fire & Heat",
+            "icon": "🔥",
+            "badge": "BEZ ZAPAŁEK",
+            "color": [255, 82, 82]
+        },
+        {
+            "id": "nav",
+            "name": "Nawigacja & Orientacja",
+            "name_en": "Navigation & Orientation",
+            "icon": "🧭",
+            "badge": "BEZ GPS",
+            "color": [255, 215, 0]
+        },
+        {
+            "id": "radio",
+            "name": "Łączność & SOS",
+            "name_en": "Emergency Radio & SOS",
+            "icon": "🆘",
+            "badge": "ŁĄCZNOŚĆ AWARYJNA",
+            "color": [255, 61, 0]
+        },
+        {
+            "id": "firstaid",
+            "name": "Pierwsza Pomoc & Medycyna",
+            "name_en": "First Aid & Medicine",
+            "icon": "🩹",
+            "badge": "RATOWNICTWO",
+            "color": [233, 30, 99]
+        },
+        {
+            "id": "knots",
+            "name": "Węzły & Pionierka",
+            "name_en": "Tactical Knots",
+            "icon": "🪢",
+            "badge": "LINY & WEZŁY",
+            "color": [178, 255, 89]
+        },
+        {
+            "id": "food",
+            "name": "Żywność & Dzika Kuchnia",
+            "name_en": "Wild Food & Edibility",
+            "icon": "🍃",
+            "badge": "TEST JADALNOŚCI",
+            "color": [102, 187, 106]
+        },
+        {
+            "id": "tools",
+            "name": "Kalkulatory & Narzędzia",
+            "name_en": "Calculators & Tools",
+            "icon": "🧮",
+            "badge": "INTERAKTYWNE",
+            "color": [187, 134, 252]
+        }
+    ]
+}

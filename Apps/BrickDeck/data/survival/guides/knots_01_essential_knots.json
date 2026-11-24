@@ -1,0 +1,46 @@
+{
+    "id": "knots_01_essential_knots",
+    "category": "knots",
+    "title": "5 najważniejszych węzłów ratowniczych i pionierskich",
+    "badge": "PIONIERKA & LINY",
+    "priority": "MEDIUM",
+    "author": "BrickDeck Survival Corps",
+    "tags": ["węzły", "lina", "ratowniczy", "tatrzański", "wyblinka", "prusik", "szotowy"],
+    "sections": [
+        {
+            "heading": "1. WĘZEŁ RATOWNICZY / TATRZAŃSKI (BOWLINE) - KRÓL WĘZŁÓW",
+            "type": "header",
+            "lines": [
+                "• ZASTOSOWANIE: Niezastąpiony do asekuracji człowieka, wyciągania poszkodowanego z dołu,",
+                "  cumowania łodzi, pętla asekuracyjna.",
+                "• ZALETA: Nigdy nie zaciska się pod obciążeniem – po zdjęciu ciężaru można go łatwo rozwiązać dłonią!",
+                "• JAK WIĄZAĆ: Zrób małą pętelkę na linie (jeziorko). Koniec liny (wąż) wychodzi z jeziorka,",
+                "  okrąża stojącą linę (drzewo) i wraca z powrotem w to samo jeziorko. Zaciągnij."
+            ]
+        },
+        {
+            "heading": "2. WYBLINKA (CLOVE HITCH) - MOCOWANIE DO DRZEWA / SŁUPA",
+            "type": "step",
+            "lines": [
+                "• ZASTOSOWANIE: Szybkie przywiązanie liny do drzewa, rury, budowa szałasów i tratw.",
+                "• Trzyma mocno, dopóki lina jest pod stałym naciągiem."
+            ]
+        },
+        {
+            "heading": "3. WĘZEŁ PŁASKI I SZOTOWY - ŁĄCZENIE DWÓCH LIN",
+            "type": "step",
+            "lines": [
+                "• PŁASKI (Square knot): Do wiązania bandaży i łączenia lin O TEJ SAMEJ grubości.",
+                "• SZOTOWY (Sheet bend): Niezastąpiony do bezpiecznego łączenia lin O RÓŻNEJ grubości (np. gruby sznur z cienką linką)!"
+            ]
+        },
+        {
+            "heading": "4. WĘZEŁ PRUSIKA / ZACISKOWY (TAUT-LINE HITCH)",
+            "type": "step",
+            "lines": [
+                "• ZASTOSOWANIE: Naciąg odciągów namiotu, plandeki i hamaka.",
+                "• ZALETA: Można przesuwać węzeł ręką wzdłuż liny, ale pod obciążeniem samoczynnie blokuje się!"
+            ]
+        }
+    ]
+}

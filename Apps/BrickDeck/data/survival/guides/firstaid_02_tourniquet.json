@@ -1,0 +1,44 @@
+{
+    "id": "firstaid_02_tourniquet",
+    "category": "firstaid",
+    "title": "Tamowanie masywnych krwotoków tętniczych (Staza)",
+    "badge": "KRWOTOKI TĘTNICZE",
+    "priority": "HIGH",
+    "author": "BrickDeck Survival Corps",
+    "tags": ["staza", "krwotok", "tętnica", "krępulec", "opaska", "tccc"],
+    "sections": [
+        {
+            "heading": "CZAS REAKCJI PRZY KRWOTOKU TĘTNICZYM",
+            "type": "warn",
+            "lines": [
+                "KRWOTOK Z DUŻEJ TĘTNICY (UDOWEJ, RAMIENNEJ) ZABIJA W 90-180 SEKUND!",
+                "Objawy: Krew tryska pod ciśnieniem, ma barwę jasnoczerwoną, wokół poszkodowanego szybko rośnie plama krwi.",
+                "Nie trać czasu na szukanie plastrów czy małych bandaży – natychmiast zastosuj ucisk!"
+            ]
+        },
+        {
+            "heading": "JAK ZAŁOŻYĆ IMPOWIZOWANĄ OPASKĘ UCISKOWĄ (STAZĘ)",
+            "type": "step",
+            "lines": [
+                "1. ZNAJDŹ SZEROKI PAS: Użyj paska ze spodni, trójkątnej chusty, koszuli lub krawata.",
+                "   Szerokość opaski MUSI wynosić minimum 5-7 cm! NIGDY nie używaj cienkich sznurków ani kabli,",
+                "   ponieważ przetną skórę i uszkodzą nerwy bez zaciśnięcia tętnicy.",
+                "2. MIEJSCE ZAŁOŻENIA: Załóż opaskę 5-7 cm POWYŻEJ rany (w kierunku serca).",
+                "   NIGDY nie zakładaj stazy bezpośrednio na staw (kolano, łokieć) – załóż powyżej stawu!",
+                "3. KRĘPULEC (DŹWIGNIA): Zwiąż opaskę na jeden węzeł, połóż na nim mocny patyk, długopis lub klucz,",
+                "   i zrób drugi węzeł na patyku.",
+                "4. SKRĘCANIE: Obracaj patykiem (dźwignią), aż krwawienie z rany CAŁKOWICIE USTANIE i zniknie tętno obwodowe.",
+                "5. ZABLOKOWANIE: Zablokuj patyk sznurkiem lub taśmą, aby się nie rozkręcił."
+            ]
+        },
+        {
+            "heading": "ZŁOTA ZASADA: ZAPISZ CZAS ZAŁOŻENIA STAZY!",
+            "type": "warn",
+            "lines": [
+                "• NATYCHMIAST ZAPISZ MARKEREM NA CZOLE LUB RAMIENIU POSZKODOWANEGO DOKŁADNĄ GODZINĘ (np. 'T 14:35').",
+                "• Maksymalny czas zaciśnięcia opaski bez martwicy kończyny to 2 GODZINY.",
+                "• NIGDY nie poluzowuj stazy na własną rękę przed przybyciem lekarza – grozi to wstrząsem z niedokrwienia."
+            ]
+        }
+    ]
+}

@@ -1,0 +1,42 @@
+{
+    "id": "power_02_dynamos",
+    "category": "power",
+    "title": "Wytwarzanie prądu z silników elektrycznych (Dynamo DIY)",
+    "badge": "GENERATORY",
+    "priority": "MEDIUM",
+    "author": "BrickDeck Survival Corps",
+    "tags": ["dynamo", "silnik", "prądnica", "wkrętarka", "krokowy", "graetz"],
+    "sections": [
+        {
+            "heading": "ZASADA ODWRACALNOŚCI MASZYN ELEKTRYCZNYCH",
+            "type": "header",
+            "lines": [
+                "Każdy silnik elektryczny z magnesami trwałymi po zakręceniu osią staje się prądnicą (generatorem).",
+                "W warunkach braku prądu doskonałym źródłem energii są silniki ze starych urządzeń domowych:"
+            ]
+        },
+        {
+            "heading": "1. SILNIK PRĄDU STAŁEGO (DC) Z WKRĘTARKI LUB WENTYLATORA",
+            "type": "step",
+            "lines": [
+                "• Zastosowanie: Silnik z wkrętarki akumulatorowej posiada już wbudowaną przekładnię planetarną!",
+                "  Wystarczy kręcić uchwytem wiertarskim powoli ręką, aby silnik w środku osiągał 2000 obr/min.",
+                "• Podłączenie: Silnik DC ma dwa wyprowadzenia. Kręcenie w jedną stronę daje (+/-).",
+                "• OCHRONA: Do przewodu dodatniego wlutuj lub wkręć diodę prostowniczą (np. 1N4007, 1N5819).",
+                "  Dioda zapobiega cofaniu się prądu z akumulatora do silnika, gdy przestaniesz kręcić."
+            ]
+        },
+        {
+            "heading": "2. SILNIK KROKOWY ZE SKANERA / DRUKARKI 3D (NAJWYŻSZA SPRAWNOŚĆ)",
+            "type": "step",
+            "lines": [
+                "• Zaleta: Silnik krokowy posiada dziesiątki biegunów magnetycznych. Daje wysokie napięcie (10-30V)",
+                "  nawet przy bardzo powolnym kręceniu dłonią!",
+                "• Napięcie wyjściowe: Silnik krokowy generuje prąd przemienny wielofazowy (AC).",
+                "• Mostek Prostowniczy Graetza: Aby uzyskać prąd stały (DC), musisz podłączyć wyjścia cewek",
+                "  do mostka Graetza (4 diody prostownicze) oraz kondensatora elektrolitycznego (np. 1000 uF 25V).",
+                "• Stabilizacja: Napięcie z mostka podłącz do samochodowej przetwornicy Step-Down 12V->5V USB."
+            ]
+        }
+    ]
+}

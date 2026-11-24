@@ -1,0 +1,33 @@
+{
+    "description": "Lista aktywnych modulow BrickDeck OS. Mozesz zmieniac ich kolejnosc oraz wlaczac/wylaczac flaga 'enabled'.",
+    "auto_discover": true,
+    "modules": [
+        {"id": "mod_clock", "enabled": true, "name": "Zegar, Pogoda i Odjazdy MZK"},
+        {"id": "mod_mzk_map", "enabled": true, "name": "Gorzow Live Fleet Radar"},
+        {"id": "mod_rain", "enabled": true, "name": "Radar Opadow i Burz"},
+        {"id": "mod_air_radar", "enabled": true, "name": "Global Aerospace & Satellites"},
+        {"id": "mod_marine", "enabled": true, "name": "Global Marine Traffic & AIS Radar"},
+        {"id": "mod_blitz", "enabled": true, "name": "Global Lightning Radar (Blitzortung)"},
+        {"id": "mod_sky", "enabled": true, "name": "Universal Planetarium & ISS Passes"},
+        {"id": "mod_space", "enabled": true, "name": "NOAA Space Weather & Aurora Oval"},
+        {"id": "mod_crypto", "enabled": true, "name": "Tactical Cipher & Enigma Lab"},
+        {"id": "mod_seismo", "enabled": true, "name": "Global Seismology & Drum Seismograph"},
+        {"id": "mod_survival", "enabled": true, "name": "Tactical Survival & Off-Grid Manual"},
+        {"id": "mod_flipper", "enabled": true, "name": "Flipper Zero"},
+        {"id": "mod_pwngotchi", "enabled": true, "name": "Pwngotchi Companion"},
+        {"id": "mod_radio", "enabled": true, "name": "Cyber Radio & Visualizer"},
+        {"id": "mod_netscan", "enabled": true, "name": "LAN Discovery & Port Recon"},
+        {"id": "mod_radar", "enabled": true, "name": "Tactical BLE Radar"},
+        {"id": "mod_wifi", "enabled": true, "name": "Wi-Fi Spectrum Analyzer"},
+        {"id": "mod_pinouts", "enabled": true, "name": "Hardware Pinouts Cheat-Sheet"},
+        {"id": "mod_calc", "enabled": true, "name": "CIDR & Hacker Utils"},
+        {"id": "mod_qr", "enabled": true, "name": "Kody QR & Kreskowe 1D/2D"},
+        {"id": "mod_sandbox", "enabled": true, "name": "Powder & Physics Sandbox"},
+        {"id": "mod_hass", "enabled": true, "name": "Home Assistant Controller"},
+        {"id": "mod_uart", "enabled": true, "name": "UART Serial Monitor"},
+        {"id": "mod_camera", "enabled": true, "name": "CamScope Borescope & Camera"},
+        {"id": "mod_diag", "enabled": true, "name": "Hardware Diagnostic Lab"},
+        {"id": "mod_system", "enabled": true, "name": "System Telemetry"},
+        {"id": "mod_store", "enabled": true, "name": "BrickStore GitHub App Store"}
+    ]
+}

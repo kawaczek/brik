@@ -1,0 +1,5 @@
+{
+    "label": "BrickFlipper",
+    "icon": "icon.png",
+    "launch": "launch.sh"
+}

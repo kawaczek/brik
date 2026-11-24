@@ -1,0 +1,36 @@
+{
+    "id": "food_01_universal_edibility",
+    "category": "food",
+    "title": "Uniwersalny test jadalności dzikich roślin",
+    "badge": "TEST JADALNOŚCI",
+    "priority": "MEDIUM",
+    "author": "BrickDeck Survival Corps",
+    "tags": ["rośliny", "jedzenie", "trucizny", "test", "jagody", "korzenie"],
+    "sections": [
+        {
+            "heading": "ZASADA ZŁOTA: NIGDY NIE JEDZ ROŚLIN KTÓRYCH NIE ZNASZ!",
+            "type": "warn",
+            "lines": [
+                "Człowiek bez jedzenia przeżyje do 3 tygodni. Zjedzenie trującej rośliny (np. bieluń, tojad, szalej)",
+                "zabija w kilka godzin w męczarniach. Test stosuj WYŁĄCZNIE w sytuacji skrajnego głodu!",
+                "Unikaj roślin z: białym mlecznym sokiem, kolcami, migdałowym zapachem (cyjanek) oraz parasolowatych."
+            ]
+        },
+        {
+            "heading": "8-ETAPOWY PROTOKÓŁ TESTU JADALNOŚCI",
+            "type": "step",
+            "lines": [
+                "Testuj tylko JEDNĄ część rośliny na raz (korzeń, liście lub nasiona)!",
+                "1. ZAPACH: Zmiażdż liść w dłoniach. Jeśli pachnie migdałami, amoniakiem lub stęchlizną – odrzuć.",
+                "2. KONTAKT ZE SKÓRĄ: Potrzyj sokiem delikatną skórę wewnętrznej części łokcia. Czekaj 15 minut.",
+                "   Jeśli pojawi się pieczenie, świąd, zaczerwienienie – roślina jest toksyczna.",
+                "3. WARGI: Dotknij kawałkiem rośliny zewnętrznej krawędzi wargi. Czekaj 15 minut.",
+                "4. JĘZYK: Połóż mały kawałek na czubku języka. Nie żuj i nie połykaj! Czekaj 15 minut.",
+                "5. ŻUCIE: Żuj mały kawałek przez 15 minut. Zwróć uwagę na smak (gorzki, cierpki, mydlany = toksyna). Nie połykaj!",
+                "6. POŁKNIĘCIE: Połknij ten mały kawałek i nie jedz nic innego przez 8 GODZIN.",
+                "7. Jeśli nie wystąpią nudności, skurcze ani biegunka – zjedz garść (50g) i odczekaj kolejne 8 godzin.",
+                "8. Jeśli nadal czujesz się dobrze – ta część rośliny jest zdatna do spożycia."
+            ]
+        }
+    ]
+}

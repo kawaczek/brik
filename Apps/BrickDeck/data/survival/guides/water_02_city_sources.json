@@ -1,0 +1,42 @@
+{
+    "id": "water_02_city_sources",
+    "category": "water",
+    "title": "Gdzie szukać czystej wody w mieście podczas awarii",
+    "badge": "MIASTO & BLACKOUT",
+    "priority": "HIGH",
+    "author": "BrickDeck Survival Corps",
+    "tags": ["miasto", "bojler", "spłuczka", "deszczówka", "studnie"],
+    "sections": [
+        {
+            "heading": "UKRYTE REZERWUARY WODY W KAŻDYM MIESZKANIU",
+            "type": "header",
+            "lines": [
+                "Gdy w kranach ustaje ciśnienie, w instalacjach domowych nadal uwięzione są dziesiątki litrów wody:",
+                "1. BOJLER / PODGRZEWACZ WODY (50 - 120 LITRÓW):",
+                "   Każdy wiszący bojler ma na dole zawór bezpieczeństwa ze spustem.",
+                "   Zakręć główny zawór zasilający, otwórz zawór spustowy na dole bojlera oraz odkręć",
+                "   jeden z kranów z ciepłą wodą w mieszkaniu (aby do bojlera wpadło powietrze i zeszło podciśnienie).",
+                "   Otrzymujesz 50-120 litrów czystej, zdatnej do picia wody!",
+                "",
+                "2. ZBIORNIK SPŁUCZKI TOALETOWEJ (6 - 10 LITRÓW):",
+                "   Woda w ceramicznym zbiorniku spłuczki pochodzi bezpośrednio z wodociągu miejskiego.",
+                "   O ile nie wrzucano chemicznych kostek barwiących, jest to woda czysta (przegotuj przed spożyciem).",
+                "",
+                "3. RURY PIONOWE I POZIOME (5 - 15 LITRÓW):",
+                "   Woda uwięziona w instalacji hydraulicznej grawitacyjnie spływa do najniższego punktu.",
+                "   Otwórz najniższy kran w mieszkaniu lub w piwnicy budynku, aby zlać resztki z pionu."
+            ]
+        },
+        {
+            "heading": "NATURALNE ŹRÓDŁA W TERENIE ZURBANIZOWANYM",
+            "type": "step",
+            "lines": [
+                "• ZBIÓRKA DESZCZÓWKI: Rozciągnij plandekę, folię lub parasol skierowany w dół do wiadra.",
+                "  Pierwsze 10 minut deszczu spłukuje zanieczyszczenia z dachu – zbieraj dopiero kolejną porcję.",
+                "• ZJAWISKO TRANSPIRACJI ROŚLIN: Owiń liściastą gałąź drzewa przezroczystym workiem foliowym",
+                "  i zawiąż szczelnie u nasady. W nasłoneczniony dzień na dnie worka skropli się 200-500 ml wody.",
+                "• STUDNIE OLIGOCEŃSKIE I GŁĘBINOWE: Zlokalizuj najbliższe miejskie ujęcia awaryjne."
+            ]
+        }
+    ]
+}

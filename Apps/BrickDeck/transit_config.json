@@ -1,0 +1,20 @@
+{
+    "city": "Gorzow Wielkopolski",
+    "coordinates": {
+        "lat": 52.7333,
+        "lon": 15.2333
+    },
+    "active_stop_idx": 0,
+    "animation_style": "starfield",
+    "screensaver_timeout_sec": 60,
+    "hass_url": "http://homeassistant.local:8123",
+    "hass_token": "",
+    "stops": [
+        {"name": "Katedra", "id": "000000000095", "code": "8"},
+        {"name": "AWF", "id": "000000000005", "code": "12"},
+        {"name": "Jagielly", "id": "000000000076", "code": "161"},
+        {"name": "Dworzec Glowny", "id": "000000001264", "code": "118"},
+        {"name": "Rondo Santockie", "id": "000000000023", "code": "421"},
+        {"name": "Wieprzyce PKP", "id": "000000000127", "code": "545"}
+    ]
+}

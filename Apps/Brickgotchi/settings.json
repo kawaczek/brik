@@ -1,0 +1,12 @@
+{
+    "target_ip": "192.168.44.44",
+    "port": 8080,
+    "fallback_ips": [
+        "10.0.0.2",
+        "pwngotchi.local",
+        "127.0.0.1"
+    ],
+    "theme": "classic",
+    "refresh_interval": 1.0,
+    "bt_mac": ""
+}

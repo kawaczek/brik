@@ -1,0 +1,51 @@
+{
+    "id": "radio_01_emergency_frequencies",
+    "category": "radio",
+    "title": "Częstotliwości ratunkowe PMR446, CB i format meldunku SOS",
+    "badge": "PMR 3/33 & CB",
+    "priority": "HIGH",
+    "author": "BrickDeck Survival Corps",
+    "tags": ["radio", "pmr", "ctcss", "cb", "trójka", "sos", "meldunek"],
+    "sections": [
+        {
+            "heading": "CZĘSTOTLIWOŚCI DOSTĘPNE BEZ ZEZWOLENIA W POLSCE I EUROPIE",
+            "type": "header",
+            "lines": [
+                "Gdy padają nadajniki telefonii komórkowej (BTS działają na akumulatorach max 4-8h),",
+                "jedyną skuteczną łącznością obywatelską stają się fale radiowe PMR i CB."
+            ]
+        },
+        {
+            "heading": "1. PMR 446 MHz - TRÓJKA RATUNKOWA (KANAŁ 3, KOD CTCSS 33)",
+            "type": "step",
+            "lines": [
+                "• Częstotliwość nośna: 446.03125 MHz (Kanał 3 w radiach PMR).",
+                "• Subton CTCSS: Kod 33 (częstotliwość tonu 210.7 Hz).",
+                "• Jest to oficjalny polski kanał porozumienia ratunkowego i obywatelskiego w sytuacjach kryzysowych.",
+                "• W radiotelefonach z blokadą tonową ustawienie 3/33 eliminuje szumy i pozwala odebrać tylko wywołania alarmowe."
+            ]
+        },
+        {
+            "heading": "2. INNE KANAŁY RATUNKOWE",
+            "type": "step",
+            "lines": [
+                "• PMR KANAŁ 7 (446.08125 MHz, bez tonu): Ogólnopolski kanał prepperski i łączności kryzysowej.",
+                "• CB RADIO KANAŁ 9 (27.065 MHz AM): Międzynarodowy kanał ratunkowy (Ratunek i Pomoc).",
+                "• CB RADIO KANAŁ 19 (27.185 MHz AM): Kanał drogowy kierowców (sytuacja na drogach i mostach)."
+            ]
+        },
+        {
+            "heading": "FORMAT PRAWIDŁOWEGO MELDUNKU RATUNKOWEGO (METHANE)",
+            "type": "warn",
+            "lines": [
+                "Podczas nadawania komunikatu przez radio oszczędzaj baterię i mów zwięźle według schematu:",
+                "1. KTO WZYWA: Twoje imię, znak wywoławczy lub pseudonim.",
+                "2. GDZIE: Dokładna lokalizacja (miejscowość, ulica, numer domu, koordynaty GPS z modułu GPS/Sky).",
+                "3. CO SIĘ STAŁO: Rodzaj zagrożenia (pożar, zawał, brak prądu, powódź, brak leków).",
+                "4. ILU POSZKODOWANYCH: Liczba osób, w tym ranni i dzieci.",
+                "5. JAKICH SIŁ POTRZEBUJESZ: Medyk, ewakuacja, woda, narzędzia.",
+                "Zakończ słowem: 'ODBIÓR' i przejdź na nasłuch!"
+            ]
+        }
+    ]
+}

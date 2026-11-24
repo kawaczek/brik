@@ -1,0 +1,50 @@
+{
+    "id": "power_01_car_battery",
+    "category": "power",
+    "title": "Akumulator samochodowy 12V jako gigantyczny powerbank",
+    "badge": "500Wh OFF-GRID",
+    "priority": "HIGH",
+    "author": "BrickDeck Survival Corps",
+    "tags": ["akumulator", "12v", "usb", "ładowanie", "samochód", "przetwornica"],
+    "sections": [
+        {
+            "heading": "POTENCJAŁ ENERGETYCZNY AKUMULATORA 12V",
+            "type": "header",
+            "lines": [
+                "Standardowy akumulator samochodowy 12V o pojemności 50 Ah gromadzi: 12V × 50Ah = 600 Wh energii.",
+                "Nawet jeśli auto nie odpala z powodu mrozu lub spadku napięcia do 11.5V, akumulator wciąż ma",
+                "ponad 300-400 Wh użytecznej energii dla drobnej elektroniki!",
+                "Dla porównania: Bateria TrimUI Brick ma 11 Wh, a nowoczesny smartfon ok. 15-18 Wh.",
+                "Jeden akumulator samochodowy może naładować konsolę TrimUI Brick ponad 40 razy!"
+            ]
+        },
+        {
+            "heading": "JAK ZROBIĆ PORT USB 5V Z AKUMULATORA 12V",
+            "type": "step",
+            "lines": [
+                "POTRZEBNE MATERIAŁY:",
+                "• Zwykła ładowarka samochodowa wkładana do gniazda zapalniczki (12V -> 5V USB).",
+                "• Dwa kawałki dowolnego przewodu miedzianego (np. z uciętego kabla od lampki/głośnika).",
+                "",
+                "INSTRUKCJA PODŁĄCZENIA:",
+                "1. Przygotuj bieguny akumulatora: czerwony to PLUS (+), czarny/niebieski to MINUS (-).",
+                "2. ŚRODKOWY BOLEC ładowarki samochodowej to biegun DODATNI (+5V IN).",
+                "   Owiń ciasno odizolowany przewód wokół środkowego bolca i połącz z biegunem (+) akumulatora.",
+                "3. BOCZNE BLASZKI SPRĘŻYNOWE ładowarki to biegun UJEMNY (GND).",
+                "   Owiń drugi przewód wokół bocznej blaszki i połącz z biegunem (-) akumulatora.",
+                "4. Dioda LED w ładowarce zaświeci się – porty USB dają bezpieczne, stabilizowane 5.0V!",
+                "5. Zabezpiecz połączenie taśmą izolacyjną lub plastrem, by przewody się nie zetknęły."
+            ]
+        },
+        {
+            "heading": "BEZPIECZEŃSTWO I OCHRONA AKUMULATORA",
+            "type": "warn",
+            "lines": [
+                "• NIGDY NIE RÓB ZWARCIA bezpośrednio między klemami (+) i (-) akumulatora!",
+                "  Prąd zwarcia akumulatora ołowianego sięga 400-600 Amperów – stopi przewody i grozi wybuchem gazów.",
+                "• Nie rozładowuj akumulatora poniżej 10.5V (głębokie rozładowanie powoduje zasiarczenie płyt).",
+                "• Ładowarkę samochodową podłączaj zawsze przez bezpiecznik 2A-5A, jeśli posiadasz."
+            ]
+        }
+    ]
+}

@@ -1,0 +1,48 @@
+{
+    "id": "shelter_01_winter_room",
+    "category": "shelter",
+    "title": "Przetrwanie zimy w bloku bez ogrzewania (Pokój w Pokoju)",
+    "badge": "TERMIKA & NRC",
+    "priority": "HIGH",
+    "author": "BrickDeck Survival Corps",
+    "tags": ["zima", "mieszkanie", "namiot", "ogrzewanie", "nrc", "kartony"],
+    "sections": [
+        {
+            "heading": "DYNAMIKA WYCHŁADZANIA MIESZKANIA",
+            "type": "header",
+            "lines": [
+                "W przypadku zimowego blackoucie pompy obiegowe i piece elektrociepłowni stają w miejscu.",
+                "Mieszkanie z wielkiej płyty lub cegły traci ciepło w tempie 3-5°C na dobę.",
+                "Po 48-72 godzinach temperatura wewnątrz spada do poziomu 0-4°C.",
+                "Kluczowa zasada: NIE PRÓBUJ OGRZEWAĆ CAŁEGO MIESZKANIA! Ogrzewaj tylko mikroklimat wokół ciała."
+            ]
+        },
+        {
+            "heading": "KONCEPCJA 'POKOJU W POKOJU' (MIKROKLIMAT)",
+            "type": "step",
+            "lines": [
+                "1. WYBÓR POKOJU: Zamknij drzwi do wszystkich pomieszczeń. Wybierz najmniejszy pokój",
+                "   w środku mieszkania – z dala od narożników budynku i bez ścian szczytowych.",
+                "2. NAMIOT NA ŁÓŻKU: Rozstaw zwykły turystyczny namiot dwuosobowy na materacu lub dywanie.",
+                "   Objętość namiotu (ok. 2-3 m³) jest stukrotnie mniejsza niż pokoju.",
+                "   Ciało dorosłego człowieka w spoczynku oddaje ok. 80-100 Watów ciepła.",
+                "   Dwie osoby w zamkniętym namiocie podniosą temperaturę o 7-10°C powyżej temperatury pokoju!",
+                "3. JEŚLI NIE MASZ NAMIOTU: Zbuduj fort ze stołu narzuconego grubymi kocami i kołdrami sięgającymi ziemi.",
+                "4. OKNA: Zasłoń szczelnie kocami termicznymi NRC (srebrną stroną do wnętrza pokoju) lub grubymi zasłonami."
+            ]
+        },
+        {
+            "heading": "IZOLACJA OD PODŁOGI (GDZIE UCIEKA CIEPŁO)",
+            "type": "warn",
+            "lines": [
+                "Największym wrogiem w zimnym pomieszczeniu jest kondukcja (przewodzenie ciepła do betonu).",
+                "Podłoga wysysa ciepło z ciała przez materac!",
+                "WARSTWY IZOLACYJNE OD DOŁU:",
+                "• Kartony z tektury falistej (posiadają pęcherzyki powietrza – znakomity izolator).",
+                "• Dywan lub gruba wełniana narzuta.",
+                "• Karimata z pianki EVA lub folią aluminiową.",
+                "• Materac lub gruba kołdra pod plecy."
+            ]
+        }
+    ]
+}

@@ -1,0 +1,5 @@
+{
+    "label": "Brickgotchi",
+    "icon": "icon.png",
+    "launch": "launch.sh"
+}

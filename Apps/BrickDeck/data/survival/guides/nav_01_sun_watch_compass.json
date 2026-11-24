@@ -1,0 +1,42 @@
+{
+    "id": "nav_01_sun_watch_compass",
+    "category": "nav",
+    "title": "Wyznaczanie kierunku północy za pomocą zegarka i słońca",
+    "badge": "NAWIGACJA SŁONECZNA",
+    "priority": "HIGH",
+    "author": "BrickDeck Survival Corps",
+    "tags": ["nawigacja", "kompas", "słońce", "zegarek", "północ", "azymut"],
+    "sections": [
+        {
+            "heading": "ZASADA DWUSIECZNEJ KĄTA (PÓŁKULA PÓŁNOCNA)",
+            "type": "header",
+            "lines": [
+                "Słońce wędruje po niebie ze wschodu na zachód z prędkością 15° na godzinę.",
+                "Wskazówka godzinowa tradycyjnego zegarka obraca się z prędkością 30° na godzinę (dwa razy szybciej).",
+                "Z tego powodu dwusieczna kąta między wskazówką a godziną 12:00 zawsze wskazuje oś PÓŁNOC - POŁUDNIE!"
+            ]
+        },
+        {
+            "heading": "INSTRUKCJA KROK PO KROKU DLA POLSKI / EUROPY",
+            "type": "step",
+            "lines": [
+                "1. Zegarek trzymaj poziomo na dłoni (jeśli masz zegarek cyfrowy, narysuj tarczę patykiem na piasku).",
+                "2. SKIERUJ WSKAZÓWKĘ GODZINOWĄ DOKŁADNIE W STRONĘ SŁOŃCA (możesz użyć cienia pionowego patyka).",
+                "3. ZNAJDŹ KĄT między wskazówką godzinową a godziną 12:00 na tarczy:",
+                "   • W czasie zimowym (UTC+1): bierz pod uwagę godzinę 12:00.",
+                "   • W czasie letnim (UTC+2): bierz pod uwagę godzinę 1:00 (13:00) z uwagi na przesunięcie czasu.",
+                "4. PODZIEL TEN KĄT NA PÓŁ (DWUSIECZNA):",
+                "   Linia przechodząca przez środek tarczy i dzieląca ten kąt wskazuje POŁUDNIE (South)!",
+                "5. Przeciwny kierunek tej linii wskazuje PÓŁNOC (North)."
+            ]
+        },
+        {
+            "heading": "METODA DLA PÓŁKULI POŁUDNIOWEJ (NP. AUSTRALIA)",
+            "type": "tip",
+            "lines": [
+                "Na półkuli południowej skieruj godzinę 12:00 w stronę słońca.",
+                "Dwusieczna kąta między godziną 12:00 a wskazówką godzinową wskaże wtedy PÓŁNOC."
+            ]
+        }
+    ]
+}

@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>BrickDeck OS // Python WebAssembly Lab (Pyodide WASM)</title>
   <meta name="description" content="Laboratorium uruchamiania surowych plików Python (.py) w przeglądarce przez Pyodide WebAssembly dla TrimUI Brick.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -813,7 +816,7 @@ py_mod = None
     let registryData = null;
     async function loadModuleCatalog() {
       try {
-        const res = await fetch('store/registry.json');
+        const res = await fetch('store/registry.json?t=' + Date.now(), { cache: 'no-store' });
         if (res.ok) {
           registryData = await res.json();
           moduleSelect.innerHTML = '';
@@ -855,10 +858,10 @@ py_mod = None
 
       let code = "";
       let path = `store/modules/${modId}.py`;
-      let resp = await fetch(path);
+      let resp = await fetch(path + '?t=' + Date.now(), { cache: 'no-store' });
       if (!resp.ok) {
         path = `Apps/BrickDeck/modules/${modId}.py`;
-        resp = await fetch(path);
+        resp = await fetch(path + '?t=' + Date.now(), { cache: 'no-store' });
       }
 
       if (resp.ok) {

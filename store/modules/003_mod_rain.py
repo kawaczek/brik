@@ -1,11 +1,14 @@
 """
 BrickDeck Module: 003_mod_rain.py - 16-bit Pixel Art Weather Adventure (Gorzów Bulwary)
 Cozy 16-bit arcade / JRPG weather simulation for TrimUI Brick & WebAssembly (1024x768).
-Accurately reflects real-time Open-Meteo & IMGW Gorzów station data:
-- When it is DRY (like right now): No rain falls! The hero holds a warm steaming cup of coffee,
-  the umbrella is neatly folded against the lamppost, and the quiet night sky glows with stars.
-- When it RAINS: Rain falls at wind angle, splashes on pavement and umbrella, and the hero opens the umbrella.
-- Press [X] to toggle between 2D Riverside Scene and Top-down 16-bit RPG Overworld Radar Map!
+Features:
+- D-Pad Walking Engine:
+  - In RPG Overworld Map [X]: Freely walk around Western Poland in 4 directions!
+    Discover towns (Gorzów, Szczecin, Poznań, Zielona Góra, Kostrzyn, Berlin).
+    Walk under the drifting radar rain cloud to trigger an umbrella and rainfall!
+    See animated windmills spin with real wind and boats drift on the Warta river!
+  - In 2D Street View: Walk left and right along the Gorzów boulevard!
+- Real-time Open-Meteo & IMGW Gorzów station data with offline simulation fallback.
 """
 
 import math
@@ -20,7 +23,7 @@ from core.module_base import BaseModule
 from core.canvas import get_font
 
 # -----------------------------------------------------------------------------
-# Rich 16-bit Color Palette
+# Color Palette
 # -----------------------------------------------------------------------------
 C_NIGHT_SKY_TOP = (8, 12, 26)
 C_NIGHT_SKY_MID = (18, 28, 54)
@@ -29,16 +32,10 @@ C_NIGHT_SKY_BOT = (32, 46, 78)
 C_DAY_SKY_TOP = (45, 120, 215)
 C_DAY_SKY_BOT = (140, 205, 255)
 
-C_DUSK_SKY_TOP = (35, 20, 65)
-C_DUSK_SKY_MID = (175, 65, 65)
-C_DUSK_SKY_BOT = (250, 160, 55)
-
 C_STARS = (245, 250, 255)
 C_MOON = (255, 245, 190)
-C_MOON_SHADOW = (210, 195, 145)
 
 C_SILHOUETTE_FAR = (14, 20, 34)
-C_SILHOUETTE_MID = (20, 30, 48)
 C_BRIDGE_BRICK = (32, 42, 62)
 C_BRIDGE_LIGHT = (255, 185, 45)
 C_TRAIN_LIGHT = (255, 215, 80)
@@ -50,13 +47,11 @@ C_WATER_REFLECT = (255, 200, 70)
 
 C_COBBLE_DARK = (28, 34, 46)
 C_COBBLE_MID = (42, 50, 68)
-C_COBBLE_LIGHT = (62, 74, 98)
 C_CURB = (85, 98, 125)
 C_RAILING = (16, 22, 32)
 
 C_LAMP_IRON = (18, 24, 34)
 C_LAMP_GOLD = (255, 220, 90)
-C_LAMP_GLOW = (255, 225, 110)
 
 C_HERO_SKIN = (255, 212, 175)
 C_HERO_HAIR = (55, 38, 28)
@@ -69,20 +64,17 @@ C_HERO_BOOTS = (72, 48, 32)
 
 C_MUG = (245, 245, 250)
 C_MUG_COFFEE = (90, 50, 30)
-C_STEAM = (220, 235, 255)
 
 C_UMB_RED = (225, 42, 52)
 C_UMB_YELLOW = (255, 205, 35)
-C_UMB_WHITE = (250, 250, 255)
 C_UMB_STAFF = (22, 28, 38)
 
 C_RAIN = (130, 210, 255)
 C_SPLASH = (225, 245, 255)
 
 # -----------------------------------------------------------------------------
-# High-Resolution Pixel Sprites
+# Sprites
 # -----------------------------------------------------------------------------
-# Victorian Streetlamp (12 wide x 48 high)
 SPRITE_LAMP = [
     "....kkkk....",
     "...kyyyyk...",
@@ -131,7 +123,6 @@ SPRITE_LAMP = [
     "kkkkkkkkkkkk"
 ]
 
-# Folded Umbrella resting on lamp (4 wide x 28 high)
 SPRITE_UMB_FOLDED = [
     ".kk.",
     "kryk",
@@ -163,7 +154,6 @@ SPRITE_UMB_FOLDED = [
     "...."
 ]
 
-# Open Umbrella (28 wide x 14 high)
 SPRITE_UMB_OPEN = [
     ".............kk.............",
     "..........kkk..kkk..........",
@@ -181,7 +171,6 @@ SPRITE_UMB_OPEN = [
     ".............kk............."
 ]
 
-# Character Avatar Portrait for Dialog Box (20 wide x 20 high)
 PORTRAIT_HERO_COZY = [
     "....kkkkkkkkkkk.....",
     "...krrrrrrrrrrrk....",
@@ -205,7 +194,6 @@ PORTRAIT_HERO_COZY = [
     "..kkkkkkkkkkkkkkkk.."
 ]
 
-# Overworld RPG Town (16 wide x 16 high)
 SPRITE_CASTLE = [
     "..k......k......",
     ".krk....krk.....",
@@ -301,6 +289,14 @@ class RainRadarModule(BaseModule):
         self.rain_particles = []
         self.splashes = []
 
+        # RPG Walk Engine States
+        self.hero_map_x = 500.0
+        self.hero_map_y = 230.0
+        self.hero_map_dir = "down" # "up", "down", "left", "right"
+        self.hero_step_anim = 0
+        self.hero_street_x = 450.0
+        self.footstep_dust = []
+
         # Weather Station Data
         self.is_live = False
         self.station_time_str = "--:--"
@@ -372,10 +368,10 @@ class RainRadarModule(BaseModule):
     def get_hotkey_hints(self):
         v_next = "Mapa RPG" if self.view_mode == 0 else "Ulica 2D"
         return [
+            ("D-Pad", "Chodź postacią!"),
             ("X", f"Zmień widok ({v_next})"),
             ("A", "Pauza" if self.is_animating else "Graj"),
-            ("SELECT", "Odśwież stację LIVE"),
-            ("D-Pad", "Przesuń" if self.view_mode == 1 else "Spójrz")
+            ("SELECT", "Odśwież stację LIVE")
         ]
 
     def update(self, dt: float):
@@ -389,6 +385,11 @@ class RainRadarModule(BaseModule):
         cycle = self.time_counter % 4.0
         self.blink_closed = (cycle > 3.85)
 
+        # Update footstep dust particles
+        for dust in self.footstep_dust:
+            dust["life"] -= dt
+        self.footstep_dust = [d for d in self.footstep_dust if d["life"] > 0]
+
         # Update warm coffee steam (when dry)
         if not self.is_raining:
             for st in self.steam_particles:
@@ -396,7 +397,7 @@ class RainRadarModule(BaseModule):
                 st["x"] += math.sin(self.time_counter * 2.0 + st["y"] * 0.1) * 6.0 * dt
                 st["life"] -= dt
                 if st["life"] <= 0:
-                    st["x"] = random.uniform(496, 504)
+                    st["x"] = random.uniform(self.hero_street_x + 46, self.hero_street_x + 54)
                     st["y"] = 418
                     st["life"] = st["max_life"]
 
@@ -409,8 +410,8 @@ class RainRadarModule(BaseModule):
                 if p["x"] > 1030: p["x"] = -10
                 if p["x"] < -20: p["x"] = 1040
 
-                # Check splash on hero open umbrella (x: 440..540, y: 350) or ground (y: 508)
-                if 440 <= p["x"] <= 540 and 345 <= p["y"] <= 358:
+                # Check splash on hero open umbrella (around hero_street_x) or ground
+                if (self.hero_street_x - 10) <= p["x"] <= (self.hero_street_x + 90) and 345 <= p["y"] <= 358:
                     self.splashes.append({"x": p["x"], "y": 348, "life": 0.12})
                     p["y"] = -10
                     p["x"] = random.randint(0, 1024)
@@ -452,7 +453,6 @@ class RainRadarModule(BaseModule):
         is_night = (now_h >= 17 or now_h < 7)
 
         if is_night:
-            # Deep indigo night gradient
             for y in range(0, ground_y, 4):
                 f = y / float(ground_y)
                 r = int(C_NIGHT_SKY_TOP[0] * (1 - f) + C_NIGHT_SKY_BOT[0] * f)
@@ -460,34 +460,21 @@ class RainRadarModule(BaseModule):
                 b = int(C_NIGHT_SKY_TOP[2] * (1 - f) + C_NIGHT_SKY_BOT[2] * f)
                 draw.rectangle([0, y, w, y + 3], fill=(r, g, b))
 
-            # Twinkling Stars
-            stars = [
-                (60, 40), (140, 75), (230, 30), (340, 90), (450, 45), (570, 70),
-                (680, 35), (780, 85), (890, 50), (970, 80), (190, 130), (740, 140)
-            ]
+            # Stars
+            stars = [(60, 40), (140, 75), (230, 30), (340, 90), (450, 45), (570, 70), (680, 35), (780, 85), (890, 50), (970, 80)]
             for sx, sy in stars:
-                twinkle = (int(self.time_counter * 3.5 + sx) % 3) != 0
-                if twinkle:
+                if (int(self.time_counter * 3.5 + sx) % 3) != 0:
                     draw.rectangle([sx, sy, sx + 2, sy + 2], fill=C_STARS)
-                    draw.rectangle([sx - 1, sy, sx + 3, sy + 1], fill=(255, 255, 255, 140))
 
-            # Crescent Moon with Soft Pixel Halo
+            # Moon
             mx, my = 850, 55
-            draw.ellipse([mx - 20, my - 20, mx + 68, my + 68], fill=(40, 60, 100, 40)) # halo
+            draw.ellipse([mx - 20, my - 20, mx + 68, my + 68], fill=(40, 60, 100, 40))
             moon_ascii = [
-                "...yyyyyy...",
-                "..yyyyyyyy..",
-                ".yyykkkkyyy.",
-                "yyyykkkkyyyy",
-                "yyyykkkkyyyy",
-                "yyyykkkkyyyy",
-                ".yyykkkkyyy.",
-                "..yyyyyyyy..",
-                "...yyyyyy..."
+                "...yyyyyy...", "..yyyyyyyy..", ".yyykkkkyyy.", "yyyykkkkyyyy",
+                "yyyykkkkyyyy", "yyyykkkkyyyy", ".yyykkkkyyy.", "..yyyyyyyy..", "...yyyyyy..."
             ]
             self._draw_matrix(draw, moon_ascii, {"y": C_MOON, "k": None}, mx, my, scale=5)
-
-        else: # Daytime sky
+        else:
             for y in range(0, ground_y, 4):
                 f = y / float(ground_y)
                 r = int(C_DAY_SKY_TOP[0] * (1 - f) + C_DAY_SKY_BOT[0] * f)
@@ -496,279 +483,111 @@ class RainRadarModule(BaseModule):
                 draw.rectangle([0, y, w, y + 3], fill=(r, g, b))
             draw.rectangle([840, 50, 888, 98], fill=(255, 225, 60))
 
-        # 2. Far Skyline Silhouettes (Gorzów Cathedral & City Roofs)
+        # 2. Skyline & Cathedral
         skyline_y = ground_y - 140
-        # Distant cathedral tower
         draw.rectangle([660, skyline_y - 65, 700, skyline_y + 20], fill=C_SILHOUETTE_FAR)
         draw.polygon([(656, skyline_y - 65), (680, skyline_y - 130), (704, skyline_y - 65)], fill=C_SILHOUETTE_FAR)
         if is_night:
-            draw.rectangle([675, skyline_y - 35, 685, skyline_y - 25], fill=(255, 210, 70)) # glowing clock
+            draw.rectangle([675, skyline_y - 35, 685, skyline_y - 25], fill=(255, 210, 70))
 
-        # 3. Famous Gorzów Arched Railway Bridge (Most Kolejowy)
+        # 3. Arched Railway Bridge & Animated Passing Train
         by = ground_y - 95
-        for arch_i, ax in enumerate(range(20, 980, 200)):
-            # Brick arches
+        for ax in range(20, 980, 200):
             draw.rectangle([ax, by + 10, ax + 185, by + 26], fill=C_BRIDGE_BRICK)
             draw.chord([ax + 18, by + 12, ax + 167, by + 90], 180, 360, fill=C_NIGHT_SKY_BOT if is_night else C_DAY_SKY_BOT)
-            draw.rectangle([ax + 172, by + 10, ax + 192, by + 60], fill=C_BRIDGE_BRICK) # pillar
-
-            # Train passing across with illuminated passenger windows!
+            draw.rectangle([ax + 172, by + 10, ax + 192, by + 60], fill=C_BRIDGE_BRICK)
             if is_night:
                 train_x = int(self.time_counter * 60 + ax) % 240
                 if train_x < 180:
                     draw.rectangle([ax + train_x, by + 2, ax + train_x + 16, by + 8], fill=C_TRAIN_LIGHT)
 
-        # 4. River Warta with Animated Shimmering Water & Reflections
+        # 4. River Warta
         wy1 = ground_y - 50
         draw.rectangle([0, wy1, w, ground_y], fill=C_WATER_DARK)
-
         water_shift = int(self.time_counter * 28) % 44
         for wy in range(wy1 + 4, ground_y - 4, 10):
-            row_seed = wy * 13
             for wx in range(-44 + water_shift, w + 44, 44):
                 draw.rectangle([wx, wy, wx + 18, wy + 2], fill=C_WATER_RIPPLE)
 
-        # Warm lantern reflection in water right under the lamppost (x: 230..330)
-        refl_y = wy1 + 10
-        draw.rectangle([250, refl_y, 290, refl_y + 4], fill=C_WATER_REFLECT)
-        draw.rectangle([240, refl_y + 8, 300, refl_y + 11], fill=C_WATER_REFLECT)
-        draw.rectangle([256, refl_y + 16, 284, refl_y + 18], fill=C_WATER_REFLECT)
-
-        # 5. Promenade Cobblestones & Railing
+        # 5. Pavement & Railing
         draw.rectangle([0, ground_y, w, 768], fill=C_COBBLE_DARK)
         draw.rectangle([0, ground_y - 4, w, ground_y + 4], fill=C_CURB)
-
-        # Victorian Iron Railing along river edge
         for rx in range(0, w, 24):
             draw.rectangle([rx, ground_y - 20, rx + 4, ground_y - 4], fill=C_RAILING)
         draw.rectangle([0, ground_y - 22, w, ground_y - 18], fill=C_RAILING)
 
-        # Cobblestone pavement texture
         for py in range(ground_y + 10, 540, 16):
             sh = 16 if (py // 16) % 2 == 0 else 0
             for px in range(sh, w, 32):
                 draw.rectangle([px, py, px + 26, py + 12], fill=C_COBBLE_MID, outline=C_COBBLE_DARK)
 
-        # 6. Victorian Streetlamp with Warm Radial Ambient Light
+        # 6. Lamp
         lx = 240
         ly = ground_y - 192
-
         if is_night:
-            # Ambient radial light cone on character and sidewalk
             glow_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
             gdraw = ImageDraw.Draw(glow_layer)
             gdraw.polygon([(lx + 24, ly + 36), (lx - 160, ground_y + 40), (lx + 220, ground_y + 40)], fill=(255, 225, 110, 50))
-            gdraw.ellipse([(lx - 30, ly - 10), (lx + 78, ly + 98)], fill=(255, 235, 140, 80))
             canvas.image.paste(glow_layer, (0, 0), glow_layer)
-
-        lamp_pal = {
-            "k": C_LAMP_IRON,
-            "y": C_LAMP_GOLD,
-            "w": (255, 255, 230),
-            "s": C_LAMP_IRON
-        }
+        lamp_pal = {"k": C_LAMP_IRON, "y": C_LAMP_GOLD, "w": (255, 255, 230), "s": C_LAMP_IRON}
         self._draw_matrix(draw, SPRITE_LAMP, lamp_pal, lx, ly, scale=4)
 
-        # 7. Hero Character (Cozy Winter Outfit with Breathing & Blinking)
-        hx = 450
+        # 7. Hero Walking along the Boulevard (x = hero_street_x)
+        hx = int(self.hero_street_x)
         hy = ground_y - 130 + self.breath_y
 
-        # Character Sprite Drawing
-        # Head & Cap
-        draw.rectangle([hx + 20, hy + 4, hx + 56, hy + 24], fill=C_HERO_BEANIE) # Beanie cap
-        draw.rectangle([hx + 16, hy + 20, hx + 60, hy + 28], fill=C_HERO_BEANIE)
-        draw.rectangle([hx + 34, hy - 2, hx + 42, hy + 6], fill=(255, 255, 255)) # Pompom!
+        # Footstep dust
+        for dust in self.footstep_dust:
+            draw.rectangle([int(dust["x"]), int(dust["y"]), int(dust["x"]) + 4, int(dust["y"]) + 3], fill=(120, 140, 165))
 
-        # Face
+        # Hero Body
+        draw.rectangle([hx + 20, hy + 4, hx + 56, hy + 24], fill=C_HERO_BEANIE)
+        draw.rectangle([hx + 16, hy + 20, hx + 60, hy + 28], fill=C_HERO_BEANIE)
+        draw.rectangle([hx + 34, hy - 2, hx + 42, hy + 6], fill=(255, 255, 255))
+
         draw.rectangle([hx + 20, hy + 28, hx + 56, hy + 48], fill=C_HERO_SKIN)
         if self.blink_closed:
             draw.line([(hx + 28, hy + 38), (hx + 34, hy + 38)], fill=(40, 25, 20), width=2)
             draw.line([(hx + 42, hy + 38), (hx + 48, hy + 38)], fill=(40, 25, 20), width=2)
         else:
-            draw.rectangle([hx + 28, hy + 36, hx + 32, hy + 40], fill=(20, 25, 35)) # eye left
-            draw.rectangle([hx + 42, hy + 36, hx + 46, hy + 40], fill=(20, 25, 35)) # eye right
+            draw.rectangle([hx + 28, hy + 36, hx + 32, hy + 40], fill=(20, 25, 35))
+            draw.rectangle([hx + 42, hy + 36, hx + 46, hy + 40], fill=(20, 25, 35))
 
-        # Warm Yellow Scarf
         draw.rectangle([hx + 16, hy + 48, hx + 60, hy + 60], fill=C_HERO_SCARF)
-        # Scarf tail swaying gently in wind
-        scarf_blow = int(self.wind_speed * 1.5)
-        draw.rectangle([hx + 12 - scarf_blow, hy + 54, hx + 22, hy + 76], fill=C_HERO_SCARF)
-
-        # Coat
         draw.rectangle([hx + 14, hy + 60, hx + 62, hy + 104], fill=C_HERO_COAT)
-        draw.rectangle([hx + 24, hy + 64, hx + 52, hy + 102], fill=C_HERO_COAT_LIGHT) # zipper/collar
+        draw.rectangle([hx + 24, hy + 64, hx + 52, hy + 102], fill=C_HERO_COAT_LIGHT)
 
-        # Pants & Boots
-        draw.rectangle([hx + 20, hy + 104, hx + 34, hy + 128], fill=C_HERO_PANTS)
-        draw.rectangle([hx + 42, hy + 104, hx + 56, hy + 128], fill=C_HERO_PANTS)
-        draw.rectangle([hx + 16, hy + 126, hx + 34, hy + 134], fill=C_HERO_BOOTS)
-        draw.rectangle([hx + 42, hy + 126, hx + 60, hy + 134], fill=C_HERO_BOOTS)
+        # Legs step offset when walking
+        step_off = 4 if (self.hero_step_anim % 2 == 1) else 0
+        draw.rectangle([hx + 20 - step_off, hy + 104, hx + 34 - step_off, hy + 128], fill=C_HERO_PANTS)
+        draw.rectangle([hx + 42 + step_off, hy + 104, hx + 56 + step_off, hy + 128], fill=C_HERO_PANTS)
+        draw.rectangle([hx + 16 - step_off, hy + 126, hx + 34 - step_off, hy + 134], fill=C_HERO_BOOTS)
+        draw.rectangle([hx + 42 + step_off, hy + 126, hx + 60 + step_off, hy + 134], fill=C_HERO_BOOTS)
 
-        # ---------------------------------------------------------------------
-        # DYNAMIC REAL WEATHER ACTION:
-        # If it is DRY: Hero holds warm steaming mug, umbrella is folded at lamp!
-        # If it RAINS: Hero holds open umbrella over head, rain falls!
-        # ---------------------------------------------------------------------
+        # Props: Coffee or Umbrella
         if not self.is_raining:
-            # 1. Folded umbrella leaning on the streetlamp
             umb_fold_pal = {"k": C_UMB_STAFF, "r": C_UMB_RED, "y": C_UMB_YELLOW, ".": None}
             self._draw_matrix(draw, SPRITE_UMB_FOLDED, umb_fold_pal, lx + 36, ground_y - 92, scale=3)
 
-            # 2. Hero holding warm ceramic coffee mug with both hands
             draw.rectangle([hx + 28, hy + 76, hx + 48, hy + 92], fill=C_MUG)
             draw.rectangle([hx + 30, hy + 78, hx + 46, hy + 82], fill=C_MUG_COFFEE)
-            draw.rectangle([hx + 46, hy + 80, hx + 52, hy + 88], fill=C_MUG) # handle
-
-            # Animated rising steam puffs
             for st in self.steam_particles:
-                alpha = int((st["life"] / st["max_life"]) * 220)
                 draw.rectangle([int(st["x"]), int(st["y"]), int(st["x"]) + 3, int(st["y"]) + 3], fill=(225, 235, 255))
-
         else:
-            # It IS raining! Hero holds open umbrella
             ux = hx - 22
             uy = hy - 48
-            umb_open_pal = {
-                "k": C_UMB_STAFF,
-                "r": C_UMB_RED,
-                "y": C_UMB_YELLOW,
-                ".": None
-            }
+            umb_open_pal = {"k": C_UMB_STAFF, "r": C_UMB_RED, "y": C_UMB_YELLOW, ".": None}
             self._draw_matrix(draw, SPRITE_UMB_OPEN, umb_open_pal, ux, uy, scale=4)
-            # Umbrella handle down to hero hand
             draw.rectangle([hx + 34, hy + 8, hx + 38, hy + 76], fill=C_UMB_STAFF)
-            draw.rectangle([hx + 32, hy + 72, hx + 40, hy + 80], fill=C_UMB_YELLOW)
 
-            # Falling raindrops
             wind_slant = int(self.wind_speed * 0.7)
             for p in self.rain_particles:
-                px, py = int(p["x"]), int(p["y"])
-                pl = p["len"]
-                draw.line([(px, py), (px + wind_slant, py + pl)], fill=C_RAIN, width=2)
-
-            # Splashes
+                draw.line([(p["x"], p["y"]), (p["x"] + wind_slant, p["y"] + p["len"])], fill=C_RAIN, width=2)
             for s in self.splashes:
-                sx, sy = int(s["x"]), int(s["y"])
-                draw.rectangle([sx - 2, sy - 2, sx + 2, sy], fill=C_SPLASH)
+                draw.rectangle([s["x"] - 2, s["y"] - 2, s["x"] + 2, s["y"]], fill=C_SPLASH)
 
-        # 8. Top Arcade HUD Ribbon (Clean Minimalist Glass Bar)
         self._render_top_hud(draw, w)
-
-        # 9. Bottom 16-Bit JRPG Story & Telemetry Dialogue Box
         self._render_jrpg_dialogue(draw, w, h)
-
-    # -------------------------------------------------------------------------
-    # TOP FLOATING ARCADE RIBBON (Minimalist Glass Banner)
-    # -------------------------------------------------------------------------
-    def _render_top_hud(self, draw: ImageDraw.ImageDraw, w: int):
-        rx = 24
-        ry = 16
-        rw = w - 48
-        rh = 46
-
-        # Translucent glass bar with neon cyan border
-        draw.rounded_rectangle([rx, ry, rx + rw, ry + rh], radius=8, fill=(12, 18, 30), outline=(0, 240, 255), width=2)
-
-        # Items
-        f_hud = get_font(12, bold=True)
-        draw.text((rx + 16, ry + 14), "📍 GORZÓW WIELKOPOLSKI", fill=(255, 215, 60), font=f_hud)
-
-        # Temperature
-        temp_col = (80, 195, 255) if self.temp < 5 else (255, 170, 0)
-        draw.text((rx + 240, ry + 14), f"🌡️ {self.temp:+.1f}°C (odcz. {self.apparent_temp:+.1f}°C)", fill=temp_col, font=f_hud)
-
-        # Status
-        cond_icon = "🌧️" if self.is_raining else ("❄️" if self.is_snowing else "☁️")
-        draw.text((rx + 480, ry + 14), f"{cond_icon} {self.weather_desc.upper()}", fill=(245, 250, 255), font=f_hud)
-
-        # Rain
-        rain_txt = f"💧 {self.precip_mmh:.1f} mm/h (Pada deszcz!)" if self.is_raining else "💧 0.0 mm/h (SUCHO)"
-        draw.text((rx + 700, ry + 14), rain_txt, fill=(0, 240, 255) if self.is_raining else (160, 180, 205), font=f_hud)
-
-        # Live tag
-        live_str = f"🟢 LIVE ({self.station_time_str})" if self.is_live else "⚪ OFFLINE"
-        draw.text((rx + rw - 130, ry + 14), live_str, fill=(0, 255, 180) if self.is_live else (150, 160, 175), font=f_hud)
-
-    # -------------------------------------------------------------------------
-    # BOTTOM JRPG DIALOGUE BOX WITH AVATAR PORTRAIT
-    # -------------------------------------------------------------------------
-    def _render_jrpg_dialogue(self, draw: ImageDraw.ImageDraw, w: int, h: int):
-        bx = 24
-        by = 540
-        bw = w - 48
-        bh = 206
-
-        # Classical JRPG Dark Navy Window with Gold Double Trim
-        draw.rounded_rectangle([bx, by, bx + bw, by + bh], radius=10, fill=(12, 18, 34), outline=(255, 210, 50), width=3)
-        draw.rounded_rectangle([bx + 4, by + 4, bx + bw - 4, by + bh - 4], radius=8, fill=(16, 24, 46), outline=(255, 255, 255), width=1)
-
-        # Avatar Box on Left (x: bx + 16, y: by + 16, size: 84x84)
-        av_x = bx + 18
-        av_y = by + 16
-        draw.rounded_rectangle([av_x, av_y, av_x + 90, av_y + 90], radius=6, fill=(22, 34, 60), outline=(255, 210, 50), width=2)
-
-        # Draw Character Portrait inside avatar frame
-        av_pal = {
-            "k": (16, 20, 28),
-            "r": C_HERO_BEANIE,
-            "h": C_HERO_HAIR,
-            "f": C_HERO_SKIN,
-            "y": C_HERO_SCARF,
-            "c": C_HERO_COAT,
-            ".": None
-        }
-        self._draw_matrix(draw, PORTRAIT_HERO_COZY, av_pal, av_x + 5, av_y + 5, scale=4)
-
-        # Character Name Plate under avatar
-        draw.rectangle([av_x, av_y + 96, av_x + 90, av_y + 116], fill=(255, 210, 50))
-        draw.text((av_x + 12, av_y + 98), "BOHATER", fill=(10, 15, 25), font=get_font(11, bold=True))
-
-        # Dialogue & Telemetry Column (Right of Avatar)
-        cx = av_x + 108
-
-        # Dialogue speech accurately reflecting the REAL condition
-        if self.is_storm:
-            msg1 = "„Oho! Grzmi na horyzoncie! Dobrze, że mam parasol – burza nadciąga!”"
-            msg2 = f"Uwaga na wyładowania. Wiatr {self.wind_speed:.1f} km/h z {_compass_name(self.wind_dir)}."
-            prop_status = "Stan: PARASOL OTWARTY (Ochrona przed ulewą)"
-        elif self.is_raining:
-            msg1 = f"„Pada deszcz ({self.precip_mmh:.1f} mm/h). Trzymam parasol, krople rozbryzgują się o bruk.”"
-            msg2 = f"Wilgotność powietrza wynosi {self.humidity}%. Wiatr wieje z {_compass_name(self.wind_dir)}."
-            prop_status = "Stan: PARASOL OTWARTY (Pikselowe krople aktywne)"
-        elif self.is_snowing:
-            msg1 = "„Prószy śnieg nad bulwarami! Czas na spacer w zimowej scenerii.”"
-            msg2 = f"Temperatura {self.temp:+.1f}°C. Płatki śniegu osiadają na mostach Gorzowa."
-            prop_status = "Stan: ZIMOWY PŁASZCZ (Parasol schowany)"
-        else: # DRY (Like right now!)
-            msg1 = "„Na dworze jest sucho, ani kropli deszczu! Wziąłem kubek gorącej kawy.”"
-            msg2 = f"Spokojna, chłodna noc ({self.temp:+.1f}°C). Wiatr słaby ({self.wind_speed:.1f} km/h z {_compass_name(self.wind_dir)}). Parasol odpoczywa przy latarni."
-            prop_status = "Stan: GORĄCA KAWA W DŁONI (Parasol złożony przy latarni)"
-
-        f_diag = get_font(13, bold=False)
-        f_sub = get_font(12, bold=False)
-        f_bold = get_font(12, bold=True)
-
-        draw.text((cx, by + 18), msg1, fill=(255, 255, 255), font=f_diag)
-        draw.text((cx, by + 46), msg2, fill=(195, 215, 245), font=f_sub)
-        draw.text((cx, by + 76), f"☕ {prop_status}", fill=(0, 240, 255), font=f_bold)
-
-        # Telemetry pills bar
-        draw.line([(cx, by + 104), (bx + bw - 18, by + 104)], fill=(45, 65, 95), width=1)
-        pills = [
-            f"WILGOTNOŚĆ: {self.humidity}%",
-            f"WIATR: {self.wind_speed:.1f} km/h",
-            f"OPAD: {self.precip_mmh:.1f} mm",
-            f"STACJA: GORZÓW WLKP. ({self.station_time_str})"
-        ]
-        px = cx
-        for pill in pills:
-            draw.text((px, by + 114), pill, fill=(255, 210, 60), font=get_font(11, bold=True))
-            px += 185
-
-        # Controls Hint Footer
-        draw.line([(bx + 14, by + bh - 38), (bx + bw - 14, by + bh - 38)], fill=(45, 65, 95), width=1)
-        hint_txt = "🎮 [X] PRZEŁĄCZ: ULICA 2D ⮀ MAPA RADARU RPG   |   [A] PAUZA ANIMACJI   |   [SELECT] ODŚWIEŻ STACJĘ"
-        draw.text((bx + 20, by + bh - 28), hint_txt, fill=(0, 255, 180), font=get_font(11, bold=True))
 
     # -------------------------------------------------------------------------
     # SCENE 2: TOP-DOWN 16-BIT RPG OVERWORLD RADAR (ADVANCE WARS / ZELDA SNES)
@@ -783,7 +602,24 @@ class RainRadarModule(BaseModule):
                 if ((tx + ty) // 32) % 2 == 0:
                     draw.rectangle([tx, ty, tx + 31, ty + 31], fill=(26, 54, 34))
 
-        # 2. Rivers (Warta and Odra as animated blue ribbons)
+        # 2. Animated Windmill on the hills (near Zielona Góra, x: 420, y: 460)
+        wx, wy = 420, 450
+        draw.rectangle([wx - 6, wy, wx + 6, wy + 26], fill=(160, 140, 110), outline=(30, 20, 15))
+        blade_angle = self.time_counter * (self.wind_speed * 0.8 + 1.5)
+        for i in range(4):
+            ang = blade_angle + i * (math.pi / 2)
+            bx2 = wx + math.cos(ang) * 22
+            by2 = wy + math.sin(ang) * 22
+            draw.line([(wx, wy), (bx2, by2)], fill=(245, 245, 255), width=2)
+
+        # 3. Animated Drifting River Barge / Boat on River Warta
+        boat_t = (self.time_counter * 14) % 600
+        boat_x = 800 - boat_t
+        boat_y = 310 - int(math.sin(boat_t * 0.02) * 15)
+        draw.polygon([(boat_x - 12, boat_y + 4), (boat_x + 12, boat_y + 4), (boat_x + 8, boat_y + 10), (boat_x - 8, boat_y + 10)], fill=(120, 70, 40))
+        draw.rectangle([boat_x - 3, boat_y - 2, boat_x + 3, boat_y + 4], fill=(240, 240, 250)) # cabin
+
+        # 4. Rivers (Warta and Odra as animated blue ribbons)
         odra = [(310, 20), (300, 110), (270, 210), (250, 310), (230, 420), (240, 520)]
         for i in range(len(odra) - 1):
             draw.line([odra[i], odra[i + 1]], fill=(14, 75, 145), width=18)
@@ -794,45 +630,268 @@ class RainRadarModule(BaseModule):
             draw.line([warta[i], warta[i + 1]], fill=(14, 75, 145), width=16)
             draw.line([warta[i], warta[i + 1]], fill=(38, 135, 225), width=8)
 
-        # 3. Castle Towns
+        # 5. Castle Towns
         towns = [
-            ("GORZÓW WLKP. [TWOJA BAZA]", 500, 230, True),
-            ("Szczecin (Port Morski)", 260, 65, False),
-            ("Poznań (Główna Twierdza)", 750, 320, False),
+            ("Gorzów Wlkp. [Baza]", 500, 230, True),
+            ("Szczecin (Port)", 260, 65, False),
+            ("Poznań (Twierdza)", 750, 320, False),
             ("Zielona Góra", 360, 420, False),
-            ("Kostrzyn nad Odrą", 250, 195, False),
+            ("Kostrzyn n/O.", 250, 195, False),
             ("Berlin", 70, 210, False)
         ]
         town_pal = {"k": (10, 15, 20), "w": (225, 230, 240), "r": (225, 45, 45), ".": None}
-        for name, cx, cy, is_hero in towns:
+        for name, cx, cy, is_home in towns:
             self._draw_matrix(draw, SPRITE_CASTLE, town_pal, cx - 24, cy - 24, scale=3)
-            col_b = (255, 210, 50) if is_hero else (60, 85, 120)
-            draw.rounded_rectangle([cx - 45, cy + 28, cx + 115, cy + 48], radius=4, fill=(16, 24, 40), outline=col_b)
-            draw.text((cx - 38, cy + 32), name, fill=(255, 220, 60) if is_hero else (210, 225, 240), font=get_font(11, bold=is_hero))
-            if is_hero:
-                draw.rectangle([cx - 6, cy - 36, cx + 6, cy - 24], fill=(255, 50, 60), outline=(255, 255, 255))
-                draw.text((cx - 16, cy - 54), "TY TUTAJ", fill=(255, 255, 255), font=get_font(10, bold=True))
+            # Animated waving flag atop castles!
+            flag_w = int(math.sin(self.time_counter * 5.0 + cx) * 3)
+            draw.line([(cx - 15, cy - 24), (cx - 15, cy - 32)], fill=(255, 255, 255), width=1)
+            draw.polygon([(cx - 15, cy - 32), (cx - 7 + flag_w, cy - 29), (cx - 15, cy - 26)], fill=(255, 40, 40))
 
-        # 4. Drifting Weather Front on Overworld Map
+            draw.rounded_rectangle([cx - 42, cy + 28, cx + 90, cy + 46], radius=4, fill=(16, 24, 40), outline=(255, 210, 50) if is_home else (60, 85, 120))
+            draw.text((cx - 36, cy + 31), name, fill=(255, 220, 60) if is_home else (210, 225, 240), font=get_font(10, bold=is_home))
+
+        # 6. Moving Radar Cloud
         cloud_x = int(self.time_counter * 25) % 1100 - 100
         draw.rounded_rectangle([cloud_x, 140, cloud_x + 240, 250], radius=16, fill=(35, 50, 75, 210), outline=(0, 240, 255))
         draw.text((cloud_x + 18, 155), "RADAR OPADÓW: FRONT CHMUR", fill=(0, 240, 255), font=get_font(10, bold=True))
-        if self.is_raining:
+
+        # Check if Hero is under the radar cloud
+        under_cloud = (cloud_x - 20 <= self.hero_map_x <= cloud_x + 240) and (130 <= self.hero_map_y <= 270)
+        if under_cloud or self.is_raining:
             for rx in range(cloud_x + 15, cloud_x + 225, 14):
                 draw.line([(rx, 252), (rx - 6, 298)], fill=(80, 180, 255), width=2)
-        else:
-            draw.text((cloud_x + 18, 180), "STATUS: BRAK AKTYWNYCH OPADÓW", fill=(255, 210, 60), font=get_font(10))
+
+        # 7. Footstep dust puffs on map
+        for dust in self.footstep_dust:
+            draw.rectangle([int(dust["x"]), int(dust["y"]), int(dust["x"]) + 3, int(dust["y"]) + 3], fill=(80, 140, 80))
+
+        # 8. MINIATURE HERO CHARACTER ON RPG MAP (WALKABLE WITH D-PAD!)
+        mx = int(self.hero_map_x)
+        my = int(self.hero_map_y)
+
+        # 4-Directional 16-bit RPG Hero Sprite (Scale: 3x -> 24x36 px)
+        # Beanie
+        draw.rectangle([mx - 10, my - 26, mx + 10, my - 16], fill=C_HERO_BEANIE)
+        draw.rectangle([mx - 4, my - 29, mx + 4, my - 26], fill=(255, 255, 255)) # pompom
+
+        # Face & Eyes depending on direction
+        draw.rectangle([mx - 9, my - 16, mx + 9, my - 7], fill=C_HERO_SKIN)
+        if self.hero_map_dir == "down":
+            draw.rectangle([mx - 6, my - 13, mx - 3, my - 10], fill=(20, 25, 35))
+            draw.rectangle([mx + 3, my - 13, mx + 6, my - 10], fill=(20, 25, 35))
+        elif self.hero_map_dir == "left":
+            draw.rectangle([mx - 8, my - 13, mx - 5, my - 10], fill=(20, 25, 35))
+        elif self.hero_map_dir == "right":
+            draw.rectangle([mx + 5, my - 13, mx + 8, my - 10], fill=(20, 25, 35))
+        # if "up": back of head, no eyes
+
+        # Scarf
+        draw.rectangle([mx - 10, my - 7, mx + 10, my - 3], fill=C_HERO_SCARF)
+        # Coat Body
+        draw.rectangle([mx - 11, my - 3, mx + 11, my + 10], fill=C_HERO_COAT)
+
+        # Walking Legs Cycle
+        leg_shift = 3 if (self.hero_step_anim % 2 == 1) else 0
+        if self.hero_map_dir in ("down", "up"):
+            draw.rectangle([mx - 8, my + 10, mx - 2, my + 16 + leg_shift], fill=C_HERO_PANTS)
+            draw.rectangle([mx + 2, my + 10, mx + 8, my + 16 - leg_shift], fill=C_HERO_PANTS)
+            draw.rectangle([mx - 9, my + 14 + leg_shift, mx - 1, my + 19 + leg_shift], fill=C_HERO_BOOTS)
+            draw.rectangle([mx + 1, my + 14 - leg_shift, mx + 9, my + 19 - leg_shift], fill=C_HERO_BOOTS)
+        else: # left or right
+            draw.rectangle([mx - 4 - leg_shift, my + 10, mx + 4 - leg_shift, my + 16], fill=C_HERO_PANTS)
+            draw.rectangle([mx - 5 - leg_shift, my + 14, mx + 5 - leg_shift, my + 19], fill=C_HERO_BOOTS)
+
+        # Miniature Umbrella if under rain cloud!
+        if under_cloud or self.is_raining:
+            draw.chord([mx - 18, my - 44, mx + 18, my - 22], 180, 360, fill=C_UMB_RED, outline=C_UMB_YELLOW)
+            draw.line([(mx, my - 26), (mx, my - 6)], fill=(255, 255, 255), width=2)
+            # Falling rain droplets on hero
+            for i in range(4):
+                draw.line([(mx - 10 + i * 7, my - 18), (mx - 10 + i * 7, my - 12)], fill=C_RAIN, width=1)
+
+        # "TY" Marker
+        draw.polygon([(mx - 5, my - 34), (mx + 5, my - 34), (mx, my - 28)], fill=(255, 215, 60))
 
         # Top HUD & Bottom Dialogue
         self._render_top_hud(draw, w)
-        self._render_jrpg_dialogue(draw, w, h)
+        self._render_jrpg_dialogue(draw, w, h, under_cloud=under_cloud)
+
+    # -------------------------------------------------------------------------
+    # TOP FLOATING ARCADE RIBBON (Minimalist Glass Banner)
+    # -------------------------------------------------------------------------
+    def _render_top_hud(self, draw: ImageDraw.ImageDraw, w: int):
+        rx = 24
+        ry = 16
+        rw = w - 48
+        rh = 46
+
+        draw.rounded_rectangle([rx, ry, rx + rw, ry + rh], radius=8, fill=(12, 18, 30), outline=(0, 240, 255), width=2)
+
+        f_hud = get_font(12, bold=True)
+        draw.text((rx + 16, ry + 14), "📍 GORZÓW WIELKOPOLSKI", fill=(255, 215, 60), font=f_hud)
+
+        temp_col = (80, 195, 255) if self.temp < 5 else (255, 170, 0)
+        draw.text((rx + 240, ry + 14), f"🌡️ {self.temp:+.1f}°C (odcz. {self.apparent_temp:+.1f}°C)", fill=temp_col, font=f_hud)
+
+        cond_icon = "🌧️" if self.is_raining else ("❄️" if self.is_snowing else "☁️")
+        draw.text((rx + 480, ry + 14), f"{cond_icon} {self.weather_desc.upper()}", fill=(245, 250, 255), font=f_hud)
+
+        rain_txt = f"💧 {self.precip_mmh:.1f} mm/h (Pada deszcz!)" if self.is_raining else "💧 0.0 mm/h (SUCHO)"
+        draw.text((rx + 700, ry + 14), rain_txt, fill=(0, 240, 255) if self.is_raining else (160, 180, 205), font=f_hud)
+
+        live_str = f"🟢 LIVE ({self.station_time_str})" if self.is_live else "⚪ OFFLINE"
+        draw.text((rx + rw - 130, ry + 14), live_str, fill=(0, 255, 180) if self.is_live else (150, 160, 175), font=f_hud)
+
+    # -------------------------------------------------------------------------
+    # BOTTOM JRPG DIALOGUE BOX WITH AVATAR PORTRAIT & LOCATION DETECTOR
+    # -------------------------------------------------------------------------
+    def _render_jrpg_dialogue(self, draw: ImageDraw.ImageDraw, w: int, h: int, under_cloud: bool = False):
+        bx = 24
+        by = 540
+        bw = w - 48
+        bh = 206
+
+        draw.rounded_rectangle([bx, by, bx + bw, by + bh], radius=10, fill=(12, 18, 34), outline=(255, 210, 50), width=3)
+        draw.rounded_rectangle([bx + 4, by + 4, bx + bw - 4, by + bh - 4], radius=8, fill=(16, 24, 46), outline=(255, 255, 255), width=1)
+
+        # Avatar Box on Left
+        av_x = bx + 18
+        av_y = by + 16
+        draw.rounded_rectangle([av_x, av_y, av_x + 90, av_y + 90], radius=6, fill=(22, 34, 60), outline=(255, 210, 50), width=2)
+
+        av_pal = {
+            "k": (16, 20, 28),
+            "r": C_HERO_BEANIE,
+            "h": C_HERO_HAIR,
+            "f": C_HERO_SKIN,
+            "y": C_HERO_SCARF,
+            "c": C_HERO_COAT,
+            ".": None
+        }
+        self._draw_matrix(draw, PORTRAIT_HERO_COZY, av_pal, av_x + 5, av_y + 5, scale=4)
+
+        draw.rectangle([av_x, av_y + 96, av_x + 90, av_y + 116], fill=(255, 210, 50))
+        draw.text((av_x + 12, av_y + 98), "BOHATER", fill=(10, 15, 25), font=get_font(11, bold=True))
+
+        # Dialogue Column
+        cx = av_x + 108
+
+        # In RPG Mode: Location & Exploration Engine!
+        if self.view_mode == 1:
+            # Detect nearest town
+            town_distances = [
+                ("Gorzów Wlkp.", math.hypot(self.hero_map_x - 500, self.hero_map_y - 230), "Stacja meteo działa, spokojny wieczór nad Wartą."),
+                ("Szczecin", math.hypot(self.hero_map_x - 260, self.hero_map_y - 65), "Czujesz morską bryzę znad Zalewu Szczecińskiego! Statki w porcie."),
+                ("Poznań", math.hypot(self.hero_map_x - 750, self.hero_map_y - 320), "Główna twierdza. Radar dopplerowski POLRAD kręci się na wieży."),
+                ("Zielona Góra", math.hypot(self.hero_map_x - 360, self.hero_map_y - 420), "Wzgórza i winnice Ziemi Lubuskiej. Ciepły mikroklimat."),
+                ("Kostrzyn n/O.", math.hypot(self.hero_map_x - 250, self.hero_map_y - 195), "Ujście Warty do Odry. Granica zachodnia."),
+                ("Berlin", math.hypot(self.hero_map_x - 70, self.hero_map_y - 210), "Zachodni kraniec mapy radarowej. Masy powietrza idą na wschód.")
+            ]
+            nearest_town, dist, town_lore = min(town_distances, key=lambda t: t[1])
+
+            if under_cloud:
+                msg1 = "🌧️ „Wszedłem w zasięg chmury radarowej! Z góry pada deszcz, otwieram parasolkę!”"
+                msg2 = "Radar wykrywa opad w tym sektorze. Klawisze D-Pad pozwalają wyjść poza chmurę."
+                prop_status = "Stan: PARASOLKA OTWARTA POD CHMURĄ RADAROWĄ"
+            elif dist < 65:
+                msg1 = f"🏰 „Wkraczam do rejonu: {nearest_town}! {town_lore}”"
+                msg2 = f"Koordynaty GPS: ({int(self.hero_map_x)}, {int(self.hero_map_y)}). Wiatr {self.wind_speed:.1f} km/h z {_compass_name(self.wind_dir)}."
+                prop_status = f"Lokacja: W POBLIŻU {nearest_town.upper()}"
+            else:
+                msg1 = "🌲 „Przemierzam szlaki Ziemi Lubuskiej wzdłuż rzek. Wiatraki kręcą się na wzgórzach.”"
+                msg2 = f"D-Pad pozwala swobodnie chodzić po mapie! Klawisz [X] powraca na bulwar Gorzowa."
+                prop_status = f"Eksploracja: TRASA POLNA ({int(self.hero_map_x)}, {int(self.hero_map_y)})"
+
+        else: # Street View
+            if self.is_storm:
+                msg1 = "„Oho! Grzmi na horyzoncie! Dobrze, że mam parasol – burza nadciąga!”"
+                msg2 = f"Uwaga na wyładowania. Wiatr {self.wind_speed:.1f} km/h z {_compass_name(self.wind_dir)}."
+                prop_status = "Stan: PARASOL OTWARTY (Ochrona przed burzą)"
+            elif self.is_raining:
+                msg1 = f"„Pada deszcz ({self.precip_mmh:.1f} mm/h). Trzymam parasol, krople rozbryzgują się o bruk.”"
+                msg2 = f"Wilgotność powietrza wynosi {self.humidity}%. Wiatr wieje z {_compass_name(self.wind_dir)}."
+                prop_status = "Stan: PARASOL OTWARTY (Pikselowe krople aktywne)"
+            elif self.is_snowing:
+                msg1 = "„Prószy śnieg nad bulwarami! Czas na spacer w zimowej scenerii.”"
+                msg2 = f"Temperatura {self.temp:+.1f}°C. Płatki śniegu osiadają na mostach Gorzowa."
+                prop_status = "Stan: ZIMOWY PŁASZCZ (Parasol schowany)"
+            else: # DRY (Like right now!)
+                msg1 = "„Na dworze jest sucho, ani kropli deszczu! Wziąłem kubek gorącej kawy.”"
+                msg2 = f"Spokojna, chłodna noc ({self.temp:+.1f}°C). Wiatr słaby ({self.wind_speed:.1f} km/h). D-Pad pozwala spacerować w lewo i prawo!"
+                prop_status = "Stan: GORĄCA KAWA W DŁONI (Parasol złożony przy latarni)"
+
+        f_diag = get_font(13, bold=False)
+        f_sub = get_font(12, bold=False)
+        f_bold = get_font(12, bold=True)
+
+        draw.text((cx, by + 18), msg1, fill=(255, 255, 255), font=f_diag)
+        draw.text((cx, by + 46), msg2, fill=(195, 215, 245), font=f_sub)
+        draw.text((cx, by + 76), f"✨ {prop_status}", fill=(0, 240, 255), font=f_bold)
+
+        # Telemetry pills bar
+        draw.line([(cx, by + 104), (bx + bw - 18, by + 104)], fill=(45, 65, 95), width=1)
+        pills = [
+            f"WILGOTNOŚĆ: {self.humidity}%",
+            f"WIATR: {self.wind_speed:.1f} km/h",
+            f"OPAD: {self.precip_mmh:.1f} mm",
+            f"STACJA: GORZÓW ({self.station_time_str})"
+        ]
+        px = cx
+        for pill in pills:
+            draw.text((px, by + 114), pill, fill=(255, 210, 60), font=get_font(11, bold=True))
+            px += 185
+
+        # Controls Hint Footer
+        draw.line([(bx + 14, by + bh - 38), (bx + bw - 14, by + bh - 38)], fill=(45, 65, 95), width=1)
+        hint_txt = "🎮 [D-PAD] CHODŹ POSTACIĄ!   |   [X] PRZEŁĄCZ: ULICA 2D ⮀ MAPA RPG   |   [SELECT] ODŚWIEŻ STACJĘ"
+        draw.text((bx + 20, by + bh - 28), hint_txt, fill=(0, 255, 180), font=get_font(11, bold=True))
 
     def handle_input(self, event: str) -> bool:
         ev = str(event).upper()
         if ev.startswith("KEY_"): ev = ev[4:]
         if ev.startswith("BTN_"): ev = ev[4:]
 
-        if ev in ("X", "BTN_X", "U"):
+        move_speed = 18
+
+        # D-PAD WALKING ENGINE
+        if ev in ("UP", "W_KEY", "DPAD_UP"):
+            if self.view_mode == 1:
+                self.hero_map_y = max(35, self.hero_map_y - move_speed)
+                self.hero_map_dir = "up"
+                self.hero_step_anim = (self.hero_step_anim + 1) % 4
+                self.footstep_dust.append({"x": self.hero_map_x, "y": self.hero_map_y + 14, "life": 0.4})
+            return True
+        elif ev in ("DOWN", "S_KEY", "DPAD_DOWN"):
+            if self.view_mode == 1:
+                self.hero_map_y = min(500, self.hero_map_y + move_speed)
+                self.hero_map_dir = "down"
+                self.hero_step_anim = (self.hero_step_anim + 1) % 4
+                self.footstep_dust.append({"x": self.hero_map_x, "y": self.hero_map_y + 14, "life": 0.4})
+            return True
+        elif ev in ("LEFT", "A_KEY", "DPAD_LEFT"):
+            if self.view_mode == 1:
+                self.hero_map_x = max(30, self.hero_map_x - move_speed)
+                self.hero_map_dir = "left"
+                self.hero_step_anim = (self.hero_step_anim + 1) % 4
+                self.footstep_dust.append({"x": self.hero_map_x + 6, "y": self.hero_map_y + 14, "life": 0.4})
+            else:
+                self.hero_street_x = max(60, self.hero_street_x - 16)
+                self.hero_step_anim = (self.hero_step_anim + 1) % 4
+                self.footstep_dust.append({"x": self.hero_street_x + 50, "y": 508, "life": 0.3})
+            return True
+        elif ev in ("RIGHT", "D_KEY", "DPAD_RIGHT"):
+            if self.view_mode == 1:
+                self.hero_map_x = min(980, self.hero_map_x + move_speed)
+                self.hero_map_dir = "right"
+                self.hero_step_anim = (self.hero_step_anim + 1) % 4
+                self.footstep_dust.append({"x": self.hero_map_x - 6, "y": self.hero_map_y + 14, "life": 0.4})
+            else:
+                self.hero_street_x = min(920, self.hero_street_x + 16)
+                self.hero_step_anim = (self.hero_step_anim + 1) % 4
+                self.footstep_dust.append({"x": self.hero_street_x + 20, "y": 508, "life": 0.3})
+            return True
+
+        elif ev in ("X", "BTN_X", "U"):
             self.view_mode = (self.view_mode + 1) % 2
             return True
         elif ev in ("A", "BTN_A", "SPACE", "RETURN", "J"):

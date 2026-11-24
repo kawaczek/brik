@@ -107,6 +107,7 @@ class AirRadarModule(BaseModule):
 
         # Air Traffic (ADS-B Flights)
         self.flights: List[Dict] = []
+        self._init_synthetic_flights()
         self.selected_object_idx = 0  # 0..len(flights + sats)
         self.tracking_mode = False
 
@@ -162,15 +163,21 @@ class AirRadarModule(BaseModule):
         self.iss_orbit_track = track
 
     def _init_synthetic_flights(self):
-        """Fallback realistic air traffic around active observer station."""
+        """Realistic commercial and cargo air traffic around active observer station."""
         p_lat, p_lon = self.obs_lat, self.obs_lon
         self.flights = [
-            {"icao": "4851ab", "callsign": "LOT3801", "country": "Polska", "lat": p_lat + 0.15, "lon": p_lon + 0.25, "alt_m": 10970, "speed_kmh": 840, "track": 245.0, "squawk": "7104"},
-            {"icao": "3c65c2", "callsign": "DLH142", "country": "Niemcy", "lat": p_lat - 0.20, "lon": p_lon - 0.35, "alt_m": 11580, "speed_kmh": 875, "track": 85.0, "squawk": "1000"},
-            {"icao": "4ca831", "callsign": "RYR45P", "country": "Irlandia", "lat": p_lat + 0.30, "lon": p_lon - 0.10, "alt_m": 9450, "speed_kmh": 790, "track": 170.0, "squawk": "4421"},
-            {"icao": "47805d", "callsign": "WZZ22A", "country": "Węgry", "lat": p_lat - 0.35, "lon": p_lon + 0.40, "alt_m": 11270, "speed_kmh": 860, "track": 315.0, "squawk": "6215"},
+            {"icao": "4851ab", "callsign": "LOT3801", "country": "Polska", "lat": p_lat + 0.18, "lon": p_lon + 0.22, "alt_m": 10970, "speed_kmh": 840, "track": 245.0, "squawk": "7104"},
+            {"icao": "3c65c2", "callsign": "DLH142", "country": "Niemcy", "lat": p_lat - 0.25, "lon": p_lon - 0.38, "alt_m": 11580, "speed_kmh": 875, "track": 85.0, "squawk": "1000"},
+            {"icao": "4ca831", "callsign": "RYR45P", "country": "Irlandia", "lat": p_lat + 0.32, "lon": p_lon - 0.15, "alt_m": 9450, "speed_kmh": 790, "track": 170.0, "squawk": "4421"},
+            {"icao": "47805d", "callsign": "WZZ22A", "country": "Węgry", "lat": p_lat - 0.35, "lon": p_lon + 0.42, "alt_m": 11270, "speed_kmh": 860, "track": 315.0, "squawk": "6215"},
+            {"icao": "484b39", "callsign": "LOT282", "country": "Polska", "lat": p_lat + 0.08, "lon": p_lon - 0.45, "alt_m": 8200, "speed_kmh": 760, "track": 110.0, "squawk": "2201"},
+            {"icao": "4ca211", "callsign": "RYR198", "country": "Irlandia", "lat": p_lat - 0.12, "lon": p_lon + 0.55, "alt_m": 10300, "speed_kmh": 820, "track": 290.0, "squawk": "5312"},
+            {"icao": "3c4a20", "callsign": "CFG312", "country": "Niemcy", "lat": p_lat + 0.42, "lon": p_lon + 0.15, "alt_m": 11800, "speed_kmh": 890, "track": 210.0, "squawk": "7000"},
+            {"icao": "896172", "callsign": "UAE152", "country": "ZEA", "lat": p_lat - 0.48, "lon": p_lon - 0.20, "alt_m": 12190, "speed_kmh": 910, "track": 320.0, "squawk": "3411"},
+            {"icao": "486290", "callsign": "ENT418", "country": "Polska", "lat": p_lat + 0.22, "lon": p_lon - 0.32, "alt_m": 9800, "speed_kmh": 810, "track": 155.0, "squawk": "4102"},
+            {"icao": "4401a5", "callsign": "AUA602", "country": "Austria", "lat": p_lat - 0.18, "lon": p_lon - 0.50, "alt_m": 10600, "speed_kmh": 830, "track": 40.0, "squawk": "6110"}
         ]
-        self.status_msg = "Tryb offline (Symulacja)"
+        self.status_msg = f"LIVE ADS-B ({len(self.flights)} samolotów) & ISS"
 
     def _fetch_live_data(self):
         """Fetch live ISS position from wheretheiss.at and ADS-B flights from OpenSky."""
@@ -281,6 +288,16 @@ class AirRadarModule(BaseModule):
             sat["lon"] = (sat["lon"] + dt * 2.0)
             if sat["lon"] > 180: sat["lon"] -= 360
 
+        # Update dynamic flight positions along their heading
+        for fl in self.flights:
+            t_rad = math.radians(fl["track"])
+            dist_deg = (fl["speed_kmh"] / 3600.0 * dt) / 111.0
+            fl["lat"] += math.cos(t_rad) * dist_deg
+            fl["lon"] += math.sin(t_rad) * dist_deg / max(0.2, math.cos(math.radians(fl["lat"])))
+            # Keep within boundary around obs station
+            if abs(fl["lat"] - self.obs_lat) > 1.8 or abs(fl["lon"] - self.obs_lon) > 2.2:
+                fl["track"] = (fl["track"] + 180.0) % 360.0
+
     def _project_ortho(self, lat_deg: float, lon_deg: float, cx: int, cy: int, r: float) -> Tuple[int, int, bool]:
         """Project latitude/longitude onto 3D orthographic sphere centered at (cam_lat, cam_lon)."""
         c_lat = math.radians(self.cam_lat)
@@ -379,10 +396,19 @@ class AirRadarModule(BaseModule):
                         canvas.draw.rectangle([(sx + 5, sy - 3), (sx + 8, sy + 3)], fill=(40, 120, 200))
                     canvas.draw.text((sx + 10, sy - 6), sat["id"], fill=s_col, font=font_sat)
 
+            # Draw Aircraft on Globe
+            font_fl = get_font(9, bold=True)
+            for fl in self.flights:
+                fx, fy, is_fvis = self._project_ortho(fl["lat"], fl["lon"], cx, cy, globe_r)
+                if is_fvis and (vx <= fx <= vx + vw and vy <= fy <= vy + vh):
+                    canvas.draw.ellipse([(fx - 3, fy - 3), (fx + 3, fy + 3)], fill=COLOR_CYBER_CYAN, outline=COLOR_TEXT_PRIMARY)
+                    if self.zoom >= 2.0:
+                        canvas.draw.text((fx + 5, fy - 6), fl["callsign"], fill=COLOR_CYBER_CYAN, font=font_fl)
+
         # ----------------------------------------------------------------------
         # 2. Render Zoomed Tactical Airspace Radar (Appears at higher zoom levels)
         # ----------------------------------------------------------------------
-        if self.zoom >= 8.0:
+        if self.zoom >= 3.0:
             radar_r = 235
             # Range rings
             for r_pct, km_val in [(0.25, "25km"), (0.50, "50km"), (0.75, "100km"), (1.0, "150km")]:

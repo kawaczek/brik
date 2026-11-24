@@ -1041,6 +1041,11 @@ for attr in dir(cur_mod):
 
 if mod_cls:
     py_mod = mod_cls()
+    if hasattr(py_mod, "on_load"):
+        try:
+            py_mod.on_load()
+        except Exception:
+            pass
     py_canvas.clear()
 else:
     py_mod = None

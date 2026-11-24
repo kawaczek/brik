@@ -1111,8 +1111,9 @@ py_canvas.image.tobytes("raw", "RGBA")
             offCtx.putImageData(imgData, 0, 0);
             ctx.drawImage(offscreenCanvas, 0, 0, canvas.width, canvas.height);
 
-            // Fetch any missing map tiles for Air Radar in background
+            // Fetch any missing map tiles and ISS telemetry for Air Radar in background
             checkRadarTiles();
+            checkIssTelemetry();
           }
         } catch (e) {
           // keep running
@@ -1178,6 +1179,29 @@ if py_mod and hasattr(py_mod, 'receive_tile_bytes'):
       } finally {
         isFetchingTiles = false;
       }
+    }
+
+    // Real-time ISS telemetry fetcher in WASM (Free open API with CORS)
+    let lastIssFetchTime = 0;
+    async function checkIssTelemetry() {
+      if (!isReady) return;
+      const now = performance.now();
+      if (now - lastIssFetchTime < 10000) return; // Refresh every 10 seconds
+      lastIssFetchTime = now;
+      try {
+        const resp = await fetch("https://api.wheretheiss.at/v1/satellites/25544");
+        if (resp.ok) {
+          const data = await resp.json();
+          pyodide.globals.set("temp_iss_json", JSON.stringify(data));
+          pyodide.runPython(`
+if py_mod and hasattr(py_mod, 'update_iss_telemetry'):
+    try:
+        py_mod.update_iss_telemetry(temp_iss_json)
+    except Exception:
+        pass
+`);
+        }
+      } catch (e) {}
     }
 
     // 6. Handle User Input

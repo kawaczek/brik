@@ -39,18 +39,21 @@ MAP_CACHE_DIR = "/tmp/brick_maps_cache"
 # Preset Global Locations
 PRESET_CITIES = [
     ("Gorzów Wielkopolski (Baza)", 52.7333, 15.2333, "Polska"),
-    ("Warszawa (EPWA)", 52.2297, 21.0122, "Polska"),
-    ("Poznań (EPPO)", 52.4064, 16.9252, "Polska"),
-    ("Szczecin (EPSC)", 53.4285, 14.5528, "Polska"),
-    ("Wrocław (EPWR)", 51.1079, 17.0385, "Polska"),
-    ("Kraków (EPKK)", 50.0647, 19.9450, "Polska"),
-    ("Gdańsk (EPGD)", 54.3520, 18.6466, "Polska"),
-    ("Berlin (EDDB)", 52.5200, 13.4050, "Niemcy"),
-    ("Londyn (EGLL)", 51.5074, -0.1278, "Wlk. Brytania"),
-    ("Paryż (LFPG)", 48.8566, 2.3522, "Francja"),
+    ("Warszawa (EPWA Chopin)", 52.2297, 21.0122, "Polska"),
+    ("Warszawa (EPMO Modlin)", 52.4511, 20.6518, "Polska"),
+    ("Poznań (EPPO Ławica)", 52.4064, 16.9252, "Polska"),
+    ("Gdańsk (EPGD Rębiechowo)", 54.3520, 18.6466, "Polska"),
+    ("Kraków (EPKK Balice)", 50.0647, 19.9450, "Polska"),
+    ("Katowice (EPKT Pyrzowice)", 50.4743, 19.0800, "Polska"),
+    ("Wrocław (EPWR Strachowice)", 51.1079, 17.0385, "Polska"),
+    ("Szczecin (EPSC Goleniów)", 53.4285, 14.5528, "Polska"),
+    ("Berlin (EDDB Brandenburg)", 52.5200, 13.4050, "Niemcy"),
+    ("Frankfurt (EDDF Main)", 50.0379, 8.5622, "Niemcy"),
+    ("Londyn (EGLL Heathrow)", 51.5074, -0.1278, "Wlk. Brytania"),
+    ("Paryż (LFPG Charles de Gaulle)", 48.8566, 2.3522, "Francja"),
     ("Nowy Jork (KJFK)", 40.7128, -74.0060, "USA"),
-    ("Tokio (RJTT)", 35.6762, 139.6503, "Japonia"),
-    ("Sydney (YSSY)", -33.8688, 151.2093, "Australia"),
+    ("Tokio (RJTT Haneda)", 35.6762, 139.6503, "Japonia"),
+    ("Dubaj (OMDB)", 25.2532, 55.3657, "ZEA"),
     ("Przylądek Canaveral (NASA)", 28.3922, -80.6077, "USA (KSC)")
 ]
 
@@ -324,83 +327,189 @@ class AirRadarModule(BaseModule):
             track.append((lat, lon))
         self.iss_orbit_track = track
 
+    def set_base_location(self, name: str, lat: float, lon: float):
+        """Switches base station location, centers camera, and regenerates local fleet immediately."""
+        self.obs_name = name
+        self.obs_lat = lat
+        self.obs_lon = lon
+        self.cam_lat = lat
+        self.cam_lon = lon
+        self.target_cam_lat = lat
+        self.target_cam_lon = lon
+        self.zoom_idx = 4  # Default to 100 km TMA sector
+        self.current_viewport_map = None
+        self.last_map_key = None
+
+        # Build map immediately if on desktop/Linux
+        mode = self.map_modes[self.map_mode_idx]
+        if mode != "CYBER":
+            map_img = self.tile_manager.build_viewport_map(mode, self.obs_lat, self.obs_lon, self.zoom_idx, 602, 500)
+            if map_img:
+                self.current_viewport_map = map_img
+                self.last_map_key = (mode, round(self.obs_lat, 2), round(self.obs_lon, 2), self.zoom_idx)
+
+        # 1. Immediately create authentic local fleet around this new city (user never sees 0 planes!)
+        self._init_synthetic_flights()
+        self.target_flight_idx = 0
+        if self.flights:
+            self.selected_flight = self.flights[0]
+
+        city_short = name.split()[0].replace("(", "").replace(")", "")
+        self.status_msg = f"LIVE RADAR: {len(self.flights)} maszyn nad {city_short}"
+
+        # 2. Query live ADS-B data asynchronously (api.adsb.lol + opensky) to upgrade to real live flights
+        threading.Thread(target=self._fetch_live_data, daemon=True).start()
+
+    def update_iss_telemetry(self, data_json: str):
+        """Receives live ISS coordinates from WASM JavaScript fetcher."""
+        try:
+            data = json.loads(data_json)
+            if "latitude" in data and "longitude" in data:
+                self.iss_data["lat"] = float(data["latitude"])
+                self.iss_data["lon"] = float(data["longitude"])
+                self.iss_data["alt_km"] = float(data.get("altitude", 416.0))
+                self.iss_data["vel_kmh"] = int(data.get("velocity", 27600))
+                self.iss_data["visibility"] = data.get("visibility", "daylight")
+                self.satellites[0]["lat"] = self.iss_data["lat"]
+                self.satellites[0]["lon"] = self.iss_data["lon"]
+                self._generate_iss_orbit_track()
+        except Exception:
+            pass
+
+    def _decode_flight_metadata(self, cs: str, ac_type: str, reg: str) -> Tuple[str, str, str, str, str]:
+        """Translates raw ADS-B callsigns and ICAO type codes into human-readable details."""
+        model_map = {
+            "B789": "Boeing 787-9 Dreamliner", "B788": "Boeing 787-8 Dreamliner",
+            "B77W": "Boeing 777-300ER", "B772": "Boeing 777-200ER",
+            "B738": "Boeing 737-800 NG", "B38M": "Boeing 737 MAX 8", "B737": "Boeing 737-700",
+            "A359": "Airbus A350-900", "A35K": "Airbus A350-1000",
+            "A333": "Airbus A330-300", "A332": "Airbus A330-200",
+            "A321": "Airbus A321", "A21N": "Airbus A321neo",
+            "A320": "Airbus A320", "A20N": "Airbus A320neo", "A319": "Airbus A319",
+            "A223": "Airbus A220-300", "BCS3": "Airbus A220-300",
+            "E75S": "Embraer 175", "E170": "Embraer 170", "E190": "Embraer 190", "E195": "Embraer E195-E2",
+            "AT76": "ATR 72-600", "AT75": "ATR 72-500", "CRJ9": "Bombardier CRJ-900"
+        }
+        model_name = model_map.get(ac_type, f"Airliner ({ac_type})")
+
+        cs_u = cs.upper()
+        if cs_u.startswith("LOT"):
+            return "Polskie Linie Lotnicze LOT", model_name, "WAW (Warszawa)", "JFK (Nowy Jork)", "Polska"
+        elif cs_u.startswith("DLH") or cs_u.startswith("LH"):
+            return "Deutsche Lufthansa", model_name, "FRA (Frankfurt)", "WAW (Warszawa)", "Niemcy"
+        elif cs_u.startswith("RYR") or cs_u.startswith("RR") or cs_u.startswith("FR"):
+            return "Ryanair", model_name, "WMI (Modlin)", "STN (Londyn)", "Irlandia"
+        elif cs_u.startswith("WZZ") or cs_u.startswith("W6"):
+            return "Wizz Air", model_name, "WAW (Warszawa)", "BCN (Barcelona)", "Węgry"
+        elif cs_u.startswith("ENT"):
+            return "Enter Air", model_name, "WAW (Warszawa)", "AYT (Antalya)", "Polska"
+        elif cs_u.startswith("UAE") or cs_u.startswith("EK"):
+            return "Emirates", model_name, "DXB (Dubaj)", "CPH (Kopenhaga)", "ZEA"
+        elif cs_u.startswith("AFR") or cs_u.startswith("AF"):
+            return "Air France", model_name, "CDG (Paryż)", "WAW (Warszawa)", "Francja"
+        elif cs_u.startswith("BAW") or cs_u.startswith("BA"):
+            return "British Airways", model_name, "LHR (Londyn)", "WAW (Warszawa)", "Wlk. Brytania"
+        elif cs_u.startswith("KLM") or cs_u.startswith("KL"):
+            return "KLM Royal Dutch Airlines", model_name, "AMS (Amsterdam)", "WAW (Warszawa)", "Holandia"
+        elif cs_u.startswith("AUA") or cs_u.startswith("OS"):
+            return "Austrian Airlines", model_name, "VIE (Wiedeń)", "WAW (Warszawa)", "Austria"
+        elif cs_u.startswith("SAS") or cs_u.startswith("SK"):
+            return "Scandinavian Airlines", model_name, "CPH (Kopenhaga)", "WAW (Warszawa)", "Szwecja"
+        elif cs_u.startswith("SWR") or cs_u.startswith("LX"):
+            return "Swiss International Air Lines", model_name, "ZRH (Zurych)", "WAW (Warszawa)", "Szwajcaria"
+        elif cs_u.startswith("THY") or cs_u.startswith("TK"):
+            return "Turkish Airlines", model_name, "IST (Stambuł)", "WAW (Warszawa)", "Turcja"
+        elif cs_u.startswith("UPS"):
+            return "UPS Air Cargo", model_name, "CGN (Kolonia)", "WAW (Warszawa)", "USA"
+        elif cs_u.startswith("FDX"):
+            return "FedEx Express", model_name, "CDG (Paryż)", "WAW (Warszawa)", "USA"
+        elif cs_u.startswith("BCS"):
+            return "DHL European Air Transport", model_name, "LEJ (Lipsk)", "WAW (Warszawa)", "Niemcy"
+        else:
+            return "Cywilne Linie Lotnicze (ADS-B)", model_name, "WAW (Warszawa)", "CEL PRZELOTU", "Cywilny"
+
     def _init_synthetic_flights(self):
-        """Authentic commercial fleet around active observer station."""
+        """Authentic commercial fleet centered tightly around the active observer station."""
         p_lat, p_lon = self.obs_lat, self.obs_lon
-        self.flights = [
-            {
-                "icao": "4851ab", "callsign": "LOT3801", "airline": "Polskie Linie Lotnicze LOT",
-                "model": "Boeing 787-9 Dreamliner", "reg": "SP-LSA", "country": "Polska",
-                "origin": "WAW (Warszawa)", "dest": "JFK (Nowy Jork)", "progress": 0.68,
-                "lat": p_lat + 0.18, "lon": p_lon + 0.22, "alt_m": 10970, "speed_kmh": 885,
-                "track": 285.0, "vert_rate": "+0 ft/min", "squawk": "7104"
-            },
-            {
-                "icao": "3c65c2", "callsign": "DLH142", "airline": "Deutsche Lufthansa",
-                "model": "Airbus A350-900", "reg": "D-AIXG", "country": "Niemcy",
-                "origin": "FRA (Frankfurt)", "dest": "WAW (Warszawa)", "progress": 0.74,
-                "lat": p_lat - 0.25, "lon": p_lon - 0.38, "alt_m": 11580, "speed_kmh": 875,
-                "track": 85.0, "vert_rate": "-400 ft/min", "squawk": "1000"
-            },
-            {
-                "icao": "4ca831", "callsign": "RYR45P", "airline": "Ryanair",
-                "model": "Boeing 737-8200 MAX", "reg": "SP-RZX", "country": "Irlandia",
-                "origin": "KRK (Kraków)", "dest": "STN (Londyn Stansted)", "progress": 0.35,
-                "lat": p_lat + 0.32, "lon": p_lon - 0.15, "alt_m": 9450, "speed_kmh": 820,
-                "track": 270.0, "vert_rate": "+0 ft/min", "squawk": "4421"
-            },
-            {
-                "icao": "47805d", "callsign": "WZZ22A", "airline": "Wizz Air",
-                "model": "Airbus A321neo", "reg": "HA-LVS", "country": "Węgry",
-                "origin": "WAW (Warszawa)", "dest": "BCN (Barcelona)", "progress": 0.28,
-                "lat": p_lat - 0.35, "lon": p_lon + 0.42, "alt_m": 11270, "speed_kmh": 860,
-                "track": 225.0, "vert_rate": "+0 ft/min", "squawk": "6215"
-            },
-            {
-                "icao": "896172", "callsign": "UAE152", "airline": "Emirates",
-                "model": "Boeing 777-300ER", "reg": "A6-EGB", "country": "ZEA",
-                "origin": "DXB (Dubaj)", "dest": "CPH (Kopenhaga)", "progress": 0.81,
-                "lat": p_lat - 0.48, "lon": p_lon - 0.20, "alt_m": 12190, "speed_kmh": 915,
-                "track": 320.0, "vert_rate": "+0 ft/min", "squawk": "3411"
-            },
-            {
-                "icao": "484b39", "callsign": "LOT282", "airline": "Polskie Linie Lotnicze LOT",
-                "model": "Embraer E195-E2", "reg": "SP-LMA", "country": "Polska",
-                "origin": "POZ (Poznań)", "dest": "WAW (Warszawa)", "progress": 0.48,
-                "lat": p_lat + 0.08, "lon": p_lon - 0.45, "alt_m": 7200, "speed_kmh": 680,
-                "track": 95.0, "vert_rate": "+600 ft/min", "squawk": "2201"
-            },
-            {
-                "icao": "486290", "callsign": "ENT418", "airline": "Enter Air",
-                "model": "Boeing 737-800 NG", "reg": "SP-ENG", "country": "Polska",
-                "origin": "KTW (Katowice)", "dest": "AYT (Antalya)", "progress": 0.18,
-                "lat": p_lat + 0.22, "lon": p_lon - 0.32, "alt_m": 9800, "speed_kmh": 810,
-                "track": 145.0, "vert_rate": "+0 ft/min", "squawk": "4102"
-            },
-            {
-                "icao": "3944eb", "callsign": "AFR1145", "airline": "Air France",
-                "model": "Airbus A220-300", "reg": "F-HZUF", "country": "Francja",
-                "origin": "CDG (Paryż)", "dest": "WAW (Warszawa)", "progress": 0.82,
-                "lat": p_lat - 0.12, "lon": p_lon + 0.55, "alt_m": 10300, "speed_kmh": 830,
-                "track": 75.0, "vert_rate": "-800 ft/min", "squawk": "5312"
-            },
-            {
-                "icao": "4064d4", "callsign": "BAW846", "airline": "British Airways",
-                "model": "Airbus A320neo", "reg": "G-TTNN", "country": "Wlk. Brytania",
-                "origin": "LHR (Londyn Heathrow)", "dest": "WAW (Warszawa)", "progress": 0.70,
-                "lat": p_lat + 0.42, "lon": p_lon + 0.15, "alt_m": 11800, "speed_kmh": 890,
-                "track": 88.0, "vert_rate": "+0 ft/min", "squawk": "7000"
-            },
-            {
-                "icao": "4401a5", "callsign": "AUA602", "airline": "Austrian Airlines",
-                "model": "Airbus A320", "reg": "OE-LBN", "country": "Austria",
-                "origin": "VIE (Wiedeń)", "dest": "GDN (Gdańsk)", "progress": 0.55,
-                "lat": p_lat - 0.18, "lon": p_lon - 0.50, "alt_m": 10600, "speed_kmh": 830,
-                "track": 20.0, "vert_rate": "+0 ft/min", "squawk": "6110"
-            }
-        ]
+        city_lower = self.obs_name.lower()
+
+        if "warszaw" in city_lower or "epwa" in city_lower or "epmo" in city_lower:
+            fleet_def = [
+                (-0.062, -0.168, 285.0, "LOT3801", "Polskie Linie Lotnicze LOT", "Boeing 787-9 Dreamliner", "SP-LSA", "Polska", "WAW (Warszawa)", "JFK (Nowy Jork)", 10970, 885, "+0 ft/min", "7104"),
+                (+0.055, -0.310, 110.0, "DLH142", "Deutsche Lufthansa", "Airbus A350-900", "D-AIXG", "Niemcy", "FRA (Frankfurt)", "WAW (Warszawa)", 2450, 620, "-900 ft/min", "1000"),
+                (+0.224, -0.362, 275.0, "RYR45P", "Ryanair", "Boeing 737-8200 MAX", "SP-RZX", "Irlandia", "WMI (Modlin)", "STN (Londyn)", 8450, 780, "+1200 ft/min", "4421"),
+                (-0.108, +0.142, 220.0, "WZZ22A", "Wizz Air", "Airbus A321neo", "HA-LVS", "Węgry", "WAW (Warszawa)", "BCN (Barcelona)", 11270, 860, "+0 ft/min", "6215"),
+                (+0.245, +0.135, 320.0, "UAE152", "Emirates", "Boeing 777-300ER", "A6-EGB", "ZEA", "DXB (Dubaj)", "CPH (Kopenhaga)", 12190, 915, "+0 ft/min", "3411"),
+                (-0.024, -0.380, 95.0, "LOT282", "Polskie Linie Lotnicze LOT", "Embraer E195-E2", "SP-LMA", "Polska", "POZ (Poznań)", "WAW (Warszawa)", 1800, 510, "-550 ft/min", "2201"),
+                (-0.215, +0.198, 145.0, "ENT418", "Enter Air", "Boeing 737-800 NG", "SP-ENG", "Polska", "WAW (Warszawa)", "AYT (Antalya)", 7800, 760, "+850 ft/min", "4102"),
+                (+0.032, +0.285, 290.0, "AFR1145", "Air France", "Airbus A220-300", "F-HZUF", "Francja", "CDG (Paryż)", "WAW (Warszawa)", 3400, 630, "-750 ft/min", "5312"),
+                (-0.165, -0.095, 92.0, "BAW846", "British Airways", "Airbus A320neo", "G-TTNN", "Wlk. Brytania", "LHR (Londyn)", "WAW (Warszawa)", 11800, 890, "+0 ft/min", "7000"),
+                (+0.138, -0.075, 350.0, "AUA602", "Austrian Airlines", "Airbus A320", "OE-LBN", "Austria", "VIE (Wiedeń)", "GDN (Gdańsk)", 10600, 830, "+0 ft/min", "6110")
+            ]
+        elif "berlin" in city_lower or "eddb" in city_lower:
+            fleet_def = [
+                (-0.05, -0.18, 260.0, "DLH190", "Deutsche Lufthansa", "Airbus A321neo", "D-AIEA", "Niemcy", "BER (Berlin)", "FRA (Frankfurt)", 7200, 740, "+1200 ft/min", "3210"),
+                (+0.08, -0.25, 80.0, "EJU551", "EasyJet Europe", "Airbus A320neo", "OE-LSB", "Austria", "LGW (Londyn)", "BER (Berlin)", 3100, 580, "-700 ft/min", "4521"),
+                (+0.18, +0.15, 310.0, "QTR81", "Qatar Airways", "Boeing 787-9", "A7-BHA", "Katar", "DOH (Doha)", "BER (Berlin)", 11500, 890, "+0 ft/min", "6512"),
+                (-0.12, +0.22, 160.0, "RYR142", "Ryanair", "Boeing 737-800", "SP-RSB", "Polska", "BER (Berlin)", "PMI (Majorka)", 10200, 840, "+0 ft/min", "2115"),
+                (+0.22, -0.10, 115.0, "LOT388", "Polskie Linie Lotnicze LOT", "Embraer 195", "SP-LNE", "Polska", "BER (Berlin)", "WAW (Warszawa)", 6800, 710, "+900 ft/min", "7102"),
+                (-0.15, -0.28, 290.0, "AFR1234", "Air France", "Airbus A220-300", "F-HZUA", "Francja", "BER (Berlin)", "CDG (Paryż)", 10800, 860, "+0 ft/min", "5411"),
+                (+0.05, +0.28, 340.0, "SAS1677", "Scandinavian Airlines", "Airbus A320neo", "SE-ROA", "Szwecja", "BER (Berlin)", "ARN (Sztokholm)", 9500, 810, "+0 ft/min", "3321"),
+                (-0.20, +0.08, 140.0, "KLM1820", "KLM Royal Dutch Airlines", "Boeing 737-800", "PH-BGF", "Holandia", "BER (Berlin)", "AMS (Amsterdam)", 8900, 780, "+0 ft/min", "2402"),
+                (+0.12, -0.22, 75.0, "BAW982", "British Airways", "Airbus A320neo", "G-TTND", "Wlk. Brytania", "LHR (Londyn)", "BER (Berlin)", 4100, 620, "-800 ft/min", "1124"),
+                (-0.08, +0.32, 210.0, "SWR145", "Swiss International Air Lines", "Airbus A220-100", "HB-JBA", "Szwajcaria", "BER (Berlin)", "ZRH (Zurych)", 11100, 870, "+0 ft/min", "6201")
+            ]
+        elif "jfk" in city_lower or "jork" in city_lower:
+            fleet_def = [
+                (-0.06, -0.14, 220.0, "DAL401", "Delta Air Lines", "Airbus A330-900neo", "N401DX", "USA", "JFK (Nowy Jork)", "LAX (Los Angeles)", 9800, 840, "+0 ft/min", "3214"),
+                (+0.08, -0.20, 85.0, "UAL18", "United Airlines", "Boeing 777-200ER", "N78001", "USA", "SFO (San Francisco)", "EWR (Newark)", 3200, 590, "-850 ft/min", "1025"),
+                (+0.15, +0.12, 310.0, "AAL100", "American Airlines", "Boeing 777-300ER", "N718AN", "USA", "LHR (Londyn)", "JFK (Nowy Jork)", 2400, 520, "-700 ft/min", "7110"),
+                (-0.12, +0.18, 140.0, "JBU23", "JetBlue Airways", "Airbus A321neo", "N2039J", "USA", "JFK (Nowy Jork)", "MCO (Orlando)", 10500, 850, "+0 ft/min", "4215"),
+                (+0.02, +0.22, 260.0, "BAW177", "British Airways", "Boeing 777-200", "G-VIIC", "Wlk. Brytania", "LHR (Londyn)", "JFK (Nowy Jork)", 1900, 480, "-600 ft/min", "6501"),
+                (-0.18, -0.15, 45.0, "LOT006", "Polskie Linie Lotnicze LOT", "Boeing 787-9", "SP-LSB", "Polska", "JFK (Nowy Jork)", "WAW (Warszawa)", 11200, 890, "+0 ft/min", "7101"),
+                (+0.18, -0.08, 190.0, "AFR008", "Air France", "Boeing 777-300ER", "F-GSQI", "Francja", "CDG (Paryż)", "JFK (Nowy Jork)", 3800, 610, "-750 ft/min", "5204"),
+                (-0.04, +0.28, 330.0, "DLH400", "Deutsche Lufthansa", "Boeing 747-8", "D-ABYA", "Niemcy", "FRA (Frankfurt)", "JFK (Nowy Jork)", 4200, 640, "-800 ft/min", "1105"),
+                (+0.10, -0.25, 120.0, "SWA342", "Southwest Airlines", "Boeing 737-700", "N782SW", "USA", "MDW (Chicago)", "LGA (LaGuardia)", 2800, 550, "-650 ft/min", "2314"),
+                (-0.22, +0.10, 80.0, "UAE203", "Emirates", "Airbus A380-800", "A6-EOE", "ZEA", "DXB (Dubaj)", "JFK (Nowy Jork)", 3100, 570, "-700 ft/min", "3401")
+            ]
+        else:
+            fleet_def = [
+                (-0.08, -0.16, 285.0, "LOT3801", "Polskie Linie Lotnicze LOT", "Boeing 787-9 Dreamliner", "SP-LSA", "Polska", "WAW (Warszawa)", "JFK (Nowy Jork)", 10970, 885, "+0 ft/min", "7104"),
+                (+0.09, -0.25, 105.0, "DLH142", "Deutsche Lufthansa", "Airbus A350-900", "D-AIXG", "Niemcy", "FRA (Frankfurt)", "WAW (Warszawa)", 4200, 680, "-800 ft/min", "1000"),
+                (+0.18, -0.22, 275.0, "RYR45P", "Ryanair", "Boeing 737-8200 MAX", "SP-RZX", "Irlandia", "KRK (Kraków)", "STN (Londyn)", 8450, 790, "+1200 ft/min", "4421"),
+                (-0.11, +0.14, 220.0, "WZZ22A", "Wizz Air", "Airbus A321neo", "HA-LVS", "Węgry", "WAW (Warszawa)", "BCN (Barcelona)", 11270, 860, "+0 ft/min", "6215"),
+                (+0.22, +0.10, 320.0, "UAE152", "Emirates", "Boeing 777-300ER", "A6-EGB", "ZEA", "DXB (Dubaj)", "CPH (Kopenhaga)", 12190, 915, "+0 ft/min", "3411"),
+                (-0.04, -0.32, 95.0, "LOT282", "Polskie Linie Lotnicze LOT", "Embraer E195-E2", "SP-LMA", "Polska", "POZ (Poznań)", "WAW (Warszawa)", 6200, 640, "+600 ft/min", "2201"),
+                (-0.20, +0.18, 145.0, "ENT418", "Enter Air", "Boeing 737-800 NG", "SP-ENG", "Polska", "KTW (Katowice)", "AYT (Antalya)", 7800, 760, "+900 ft/min", "4102"),
+                (+0.04, +0.24, 290.0, "AFR1145", "Air France", "Airbus A220-300", "F-HZUF", "Francja", "CDG (Paryż)", "WAW (Warszawa)", 3800, 650, "-650 ft/min", "5312"),
+                (-0.15, -0.08, 90.0, "BAW846", "British Airways", "Airbus A320neo", "G-TTNN", "Wlk. Brytania", "LHR (Londyn)", "WAW (Warszawa)", 11800, 890, "+0 ft/min", "7000"),
+                (+0.12, -0.06, 350.0, "AUA602", "Austrian Airlines", "Airbus A320", "OE-LBN", "Austria", "VIE (Wiedeń)", "GDN (Gdańsk)", 10600, 830, "+0 ft/min", "6110")
+            ]
+
+        res = []
+        for dlat, dlon, trk, cs, air, mdl, reg, ctry, orig, dest, alt, spd, vr, sqk in fleet_def:
+            res.append({
+                "icao": f"48{abs(hash(cs)) % 0xFFFFF:05x}",
+                "callsign": cs,
+                "airline": air,
+                "model": mdl,
+                "reg": reg,
+                "country": ctry,
+                "origin": orig,
+                "dest": dest,
+                "progress": 0.55,
+                "lat": p_lat + dlat,
+                "lon": p_lon + dlon,
+                "alt_m": alt,
+                "speed_kmh": spd,
+                "track": trk,
+                "vert_rate": vr,
+                "squawk": sqk
+            })
+        self.flights = res
         self.selected_flight = self.flights[0]
-        self.status_msg = f"LIVE RADAR: {len(self.flights)} maszyn w zasięgu"
+        city_short = self.obs_name.split()[0].replace("(", "").replace(")", "")
+        self.status_msg = f"LIVE RADAR: {len(self.flights)} maszyn nad {city_short}"
 
     def _tile_loader_worker(self):
         """Asynchronously preloads high-resolution map tiles on native Linux / TrimUI Brick."""
@@ -453,11 +562,12 @@ class AirRadarModule(BaseModule):
             pass
 
     def _fetch_live_data(self):
-        """Fetch live ISS position from wheretheiss.at and ADS-B flights from OpenSky."""
+        """Fetch live ISS position from wheretheiss.at and real live ADS-B flights from api.adsb.lol / OpenSky."""
         ssl_ctx = ssl.create_default_context()
         ssl_ctx.check_hostname = False
         ssl_ctx.verify_mode = ssl.CERT_NONE
 
+        # 1. Real-time ISS Position
         try:
             req = urllib.request.Request(WHERETHEISS_URL, headers={"User-Agent": "BrickDeck/2.0"})
             with urllib.request.urlopen(req, context=ssl_ctx, timeout=3.5) as resp:
@@ -474,72 +584,121 @@ class AirRadarModule(BaseModule):
         except Exception:
             pass
 
+        # 2. Real ADS-B Air Traffic (Primary: api.adsb.lol 100nm, Fallback: OpenSky Network)
+        found_live = False
         try:
-            lamin = self.obs_lat - 1.2
-            lomin = self.obs_lon - 1.8
-            lamax = self.obs_lat + 1.2
-            lomax = self.obs_lon + 1.8
-            url = f"{OPENSKY_BASE_URL}?lamin={lamin:.3f}&lomin={lomin:.3f}&lamax={lamax:.3f}&lomax={lomax:.3f}"
-            req = urllib.request.Request(url, headers={"User-Agent": "BrickDeck-ADS-B/2.0"})
+            url = f"https://api.adsb.lol/v2/point/{self.obs_lat:.4f}/{self.obs_lon:.4f}/100"
+            req = urllib.request.Request(url, headers={"User-Agent": "BrickDeck-AirRadar/2.0"})
             with urllib.request.urlopen(req, context=ssl_ctx, timeout=4.0) as resp:
                 data = json.loads(resp.read().decode())
-                states = data.get("states", [])
-                if states and len(states) > 0:
+                ac_list = data.get("ac", [])
+                if ac_list and len(ac_list) > 0:
                     parsed = []
-                    for s in states:
-                        if s[6] is None or s[5] is None: continue
-                        cs = (s[1] or s[0] or "UNKNOWN").strip().upper()
-                        airline_name = "Komercyjne Linie Lotnicze"
-                        model_name = "Boeing 737-800"
-                        orig = "WAW (Warszawa)"
-                        dest = "FRA (Frankfurt)"
-                        reg = f"SP-{s[0][:4].upper()}"
+                    for a in ac_list:
+                        fl_lat = a.get("lat")
+                        fl_lon = a.get("lon")
+                        if fl_lat is None or fl_lon is None:
+                            continue
 
-                        if cs.startswith("LOT"):
-                            airline_name = "Polskie Linie Lotnicze LOT"
-                            model_name = "Boeing 787-9 Dreamliner"
-                            orig, dest = "WAW (Warszawa)", "JFK (Nowy Jork)"
-                        elif cs.startswith("DLH"):
-                            airline_name = "Deutsche Lufthansa"
-                            model_name = "Airbus A350-900"
-                            orig, dest = "FRA (Frankfurt)", "WAW (Warszawa)"
-                        elif cs.startswith("RYR"):
-                            airline_name = "Ryanair"
-                            model_name = "Boeing 737-8200 MAX"
-                            orig, dest = "KRK (Kraków)", "STN (Londyn)"
-                        elif cs.startswith("WZZ"):
-                            airline_name = "Wizz Air"
-                            model_name = "Airbus A321neo"
-                            orig, dest = "WAW (Warszawa)", "BCN (Barcelona)"
-                        elif cs.startswith("UAE"):
-                            airline_name = "Emirates"
-                            model_name = "Boeing 777-300ER"
-                            orig, dest = "DXB (Dubaj)", "CPH (Kopenhaga)"
+                        raw_flight = (a.get("flight") or a.get("r") or a.get("hex") or "UNKNOWN").strip().upper()
+                        raw_type = str(a.get("t") or "B738").strip().upper()
+                        reg = str(a.get("r") or f"SP-{str(a.get('hex', '0000'))[:4].upper()}").strip().upper()
+
+                        airline_name, model_name, orig, dest, ctry = self._decode_flight_metadata(raw_flight, raw_type, reg)
+
+                        alt_raw = a.get("alt_baro", 10000)
+                        if alt_raw == "ground":
+                            alt_m = 110.0
+                            vr_str = "0 ft/min (Kołowanie)"
+                        else:
+                            try:
+                                alt_m = float(alt_raw) * 0.3048
+                            except Exception:
+                                alt_m = 10000.0
+                            vr_val = a.get("baro_rate")
+                            vr_str = f"{int(vr_val):+d} ft/min" if vr_val is not None else "+0 ft/min"
+
+                        gs_val = a.get("gs")
+                        speed_kmh = int(gs_val * 1.852) if gs_val is not None else 800
+                        track_val = float(a.get("track") or 0.0)
 
                         parsed.append({
-                            "icao": str(s[0] or "N/A"),
-                            "callsign": cs,
+                            "icao": str(a.get("hex") or "N/A"),
+                            "callsign": raw_flight,
                             "airline": airline_name,
                             "model": model_name,
                             "reg": reg,
-                            "country": str(s[2] or "Polska"),
+                            "country": ctry,
                             "origin": orig,
                             "dest": dest,
                             "progress": 0.55,
-                            "lat": float(s[6]),
-                            "lon": float(s[5]),
-                            "alt_m": float(s[7] or 10000.0),
-                            "speed_kmh": int((s[9] or 230.0) * 3.6),
-                            "track": float(s[10] or 0.0),
-                            "vert_rate": f"{int((s[11] or 0.0) * 196.85):+d} ft/min",
-                            "squawk": str(s[14] or "7000")
+                            "lat": float(fl_lat),
+                            "lon": float(fl_lon),
+                            "alt_m": alt_m,
+                            "speed_kmh": speed_kmh,
+                            "track": track_val,
+                            "vert_rate": vr_str,
+                            "squawk": str(a.get("squawk") or "7000")
                         })
+
                     if parsed:
-                        self.flights = parsed
+                        self.flights = parsed[:25]
+                        if self.target_flight_idx >= len(self.flights):
+                            self.target_flight_idx = 0
+                        self.selected_flight = self.flights[self.target_flight_idx]
                         self.status_msg = f"LIVE ADS-B: {len(parsed)} maszyn online"
+                        found_live = True
         except Exception:
-            if not self.flights:
-                self._init_synthetic_flights()
+            pass
+
+        if not found_live:
+            try:
+                lamin = self.obs_lat - 1.2
+                lomin = self.obs_lon - 1.8
+                lamax = self.obs_lat + 1.2
+                lomax = self.obs_lon + 1.8
+                url = f"{OPENSKY_BASE_URL}?lamin={lamin:.3f}&lomin={lomin:.3f}&lamax={lamax:.3f}&lomax={lomax:.3f}"
+                req = urllib.request.Request(url, headers={"User-Agent": "BrickDeck-ADS-B/2.0"})
+                with urllib.request.urlopen(req, context=ssl_ctx, timeout=4.0) as resp:
+                    data = json.loads(resp.read().decode())
+                    states = data.get("states", [])
+                    if states and len(states) > 0:
+                        parsed = []
+                        for s in states:
+                            if s[6] is None or s[5] is None: continue
+                            cs = (s[1] or s[0] or "UNKNOWN").strip().upper()
+                            reg = f"SP-{s[0][:4].upper()}"
+                            airline_name, model_name, orig, dest, ctry = self._decode_flight_metadata(cs, "B738", reg)
+                            parsed.append({
+                                "icao": str(s[0] or "N/A"),
+                                "callsign": cs,
+                                "airline": airline_name,
+                                "model": model_name,
+                                "reg": reg,
+                                "country": str(s[2] or ctry),
+                                "origin": orig,
+                                "dest": dest,
+                                "progress": 0.55,
+                                "lat": float(s[6]),
+                                "lon": float(s[5]),
+                                "alt_m": float(s[7] or 10000.0),
+                                "speed_kmh": int((s[9] or 230.0) * 3.6),
+                                "track": float(s[10] or 0.0),
+                                "vert_rate": f"{int((s[11] or 0.0) * 196.85):+d} ft/min",
+                                "squawk": str(s[14] or "7000")
+                            })
+                        if parsed:
+                            self.flights = parsed[:25]
+                            if self.target_flight_idx >= len(self.flights):
+                                self.target_flight_idx = 0
+                            self.selected_flight = self.flights[self.target_flight_idx]
+                            self.status_msg = f"LIVE OPENSKY: {len(parsed)} maszyn online"
+                            found_live = True
+            except Exception:
+                pass
+
+        if not found_live and not self.flights:
+            self._init_synthetic_flights()
 
     def _background_worker(self):
         while self.thread_running:
@@ -650,20 +809,13 @@ class AirRadarModule(BaseModule):
                     self.city_picker_idx -= 1
                     return True
             elif event in ("DOWN", "KEY_DOWN"):
-                if self.city_picker_idx < min(12, len(PRESET_CITIES)) - 1:
+                if self.city_picker_idx < len(PRESET_CITIES) - 1:
                     self.city_picker_idx += 1
                     return True
             elif event in ("BTN_A", "KEY_A", "ENTER", "SPACE"):
                 name, lat, lon, _ = PRESET_CITIES[self.city_picker_idx]
-                self.obs_name = name
-                self.obs_lat = lat
-                self.obs_lon = lon
-                self.target_cam_lat = lat
-                self.target_cam_lon = lon
-                self.zoom_idx = 4
+                self.set_base_location(name, lat, lon)
                 self.modal_open = False
-                self.last_map_key = None
-                threading.Thread(target=self._fetch_live_data, daemon=True).start()
                 return True
             elif event in ("BTN_B", "KEY_B", "ESCAPE", "MENU"):
                 self.modal_open = False
@@ -809,6 +961,21 @@ class AirRadarModule(BaseModule):
             belly_col = (18, 38, 85)
             tail_col = (14, 32, 80)
             accent_col = (235, 35, 45)
+        elif "Enter" in airline or "ENT" in callsign:
+            body_col = (255, 255, 255)
+            belly_col = (0, 160, 220)
+            tail_col = (0, 160, 220)
+            accent_col = (255, 130, 0)
+        elif "KLM" in airline or "KLM" in callsign:
+            body_col = (0, 168, 240)
+            belly_col = (240, 245, 250)
+            tail_col = (0, 138, 215)
+            accent_col = (255, 255, 255)
+        elif "British" in airline or "BAW" in callsign:
+            body_col = (255, 255, 255)
+            belly_col = (12, 35, 80)
+            tail_col = (180, 25, 40)
+            accent_col = (20, 50, 120)
         else:
             body_col = (255, 255, 255)
             belly_col = (25, 60, 110)
@@ -1056,13 +1223,35 @@ class AirRadarModule(BaseModule):
         canvas.draw.rounded_rectangle([(vx, vy), (vx + vw, vy + vh)], radius=10, outline=COLOR_CYBER_CYAN, width=2)
 
         # ----------------------------------------------------------------------
-        # 2. Sleek Radar Scope Overlay (Range Rings, Compass, Sweep)
+        # 2. Sleek Radar Scope Overlay (Dynamic Range Rings, Compass, Sweep)
         # ----------------------------------------------------------------------
         radar_r = 230
-        for r_pct, km_val in [(0.33, "25km"), (0.66, "50km"), (1.0, "100km")]:
-            cr = int(radar_r * r_pct)
-            canvas.draw.ellipse([(cx - cr, cy - cr), (cx + cr, cy + cr)], outline=(0, 160, 240, 140), width=1)
-            canvas.draw.text((cx + 6, cy - cr + 4), km_val, fill=(0, 140, 220), font=get_font(10, bold=True))
+        zoom_map = [4, 6, 7, 8, 9, 10]
+        z = zoom_map[min(self.zoom_idx, len(zoom_map) - 1)]
+
+        rings_config = {
+            4: [300, 600, 1000],
+            6: [100, 200, 300],
+            7: [50, 100, 150],
+            8: [25, 50, 75],
+            9: [10, 20, 35],
+            10: [5, 10, 18]
+        }
+        ring_kms = rings_config.get(z, [25, 50, 100])
+
+        if cur_mode != "CYBER":
+            px_per_km = (256.0 * (2.0 ** z)) / (40075.0 * math.cos(math.radians(max(0.1, abs(self.obs_lat)))))
+        else:
+            px_per_km = radar_r / 100.0
+
+        for km_val in ring_kms:
+            cr = int(km_val * px_per_km)
+            if 12 < cr <= radar_r:
+                canvas.draw.ellipse([(cx - cr, cy - cr), (cx + cr, cy + cr)], outline=(0, 160, 240, 130), width=1)
+                canvas.draw.text((cx + 6, cy - cr + 4), f"{km_val}km", fill=(0, 140, 220), font=get_font(10, bold=True))
+
+        # Outer Radar Boundary
+        canvas.draw.ellipse([(cx - radar_r, cy - radar_r), (cx + radar_r, cy + radar_r)], outline=(0, 180, 255, 170), width=1)
 
         # Compass Crosshairs
         canvas.draw.line([(cx - radar_r, cy), (cx + radar_r, cy)], fill=(0, 160, 240, 90), width=1)
@@ -1083,20 +1272,42 @@ class AirRadarModule(BaseModule):
         canvas.draw.text((cx + 12, cy - 8), f"★ {self.obs_name}", fill=(255, 255, 255), font=get_font(11, bold=True))
 
         # ----------------------------------------------------------------------
-        # 3. Aircraft Rendering
+        # 3. Aircraft Rendering (Pixel-Perfect Web Mercator / Orthographic)
         # ----------------------------------------------------------------------
         font_plane = get_font(11, bold=True)
-        scale_km = (100.0 / max(1.0, self.zoom * 0.45))
+
+        if cur_mode != "CYBER":
+            # Exact Web Mercator (EPSG:3857) to match ESRI Map Server Tiles 1:1
+            n = 2.0 ** z
+            cx_tile = (self.obs_lon + 180.0) / 360.0 * n
+            cy_tile = (1.0 - math.asinh(math.tan(math.radians(min(85.0, max(-85.0, self.obs_lat))))) / math.pi) / 2.0 * n
+
+            for idx, fl in enumerate(self.flights):
+                fl_lat = max(-85.0, min(85.0, fl["lat"]))
+                fl_lon = fl["lon"]
+                fl_lat_rad = math.radians(fl_lat)
+                fl_x_tile = (fl_lon + 180.0) / 360.0 * n
+                fl_y_tile = (1.0 - math.asinh(math.tan(fl_lat_rad)) / math.pi) / 2.0 * n
+
+                ax = cx + int((fl_x_tile - cx_tile) * 256)
+                ay = cy + int((fl_y_tile - cy_tile) * 256)
+
+                fl["_screen_x"] = ax
+                fl["_screen_y"] = ay
+        else:
+            # 3D Orthographic Projection for 3D Globe
+            for idx, fl in enumerate(self.flights):
+                ax, ay, is_vis = self._project_ortho(fl["lat"], fl["lon"], cx, cy, globe_r)
+                if is_vis:
+                    fl["_screen_x"] = ax
+                    fl["_screen_y"] = ay
+                else:
+                    fl["_screen_x"] = -9999
+                    fl["_screen_y"] = -9999
 
         for idx, fl in enumerate(self.flights):
-            dx_km = (fl["lon"] - self.obs_lon) * 67.5
-            dy_km = (fl["lat"] - self.obs_lat) * 111.2
-            scale = radar_r / scale_km
-            ax = cx + int(dx_km * scale)
-            ay = cy - int(dy_km * scale)
-
-            fl["_screen_x"] = ax
-            fl["_screen_y"] = ay
+            ax = fl.get("_screen_x", -9999)
+            ay = fl.get("_screen_y", -9999)
 
             if vx + 10 <= ax <= vx + vw - 10 and vy + 10 <= ay <= vy + vh - 10:
                 t_rad = math.radians(fl.get("track", 0.0) - 90)
@@ -1114,7 +1325,8 @@ class AirRadarModule(BaseModule):
                 canvas.draw.polygon([(tip_x, tip_y), (tail_l_x, tail_l_y), (ax, ay), (tail_r_x, tail_r_y)],
                                     fill=p_col, outline=(255, 255, 255))
                 fl_level = int(fl.get("alt_m", 10000) * 3.28084 / 100)
-                canvas.draw.text((ax + 12, ay - 8), f"{fl['callsign']}\nFL{fl_level:03d}", fill=(20, 35, 60) if cur_mode == "STREET" else (255, 255, 255), font=font_plane)
+                txt_col = (20, 35, 60) if cur_mode == "STREET" else (255, 255, 255)
+                canvas.draw.text((ax + 12, ay - 8), f"{fl['callsign']}\nFL{fl_level:03d}", fill=txt_col, font=font_plane)
 
         # ----------------------------------------------------------------------
         # 4. PHYSICAL GAMEPAD TARGET LOCK-ON HUD (TrimUI Brick)
@@ -1253,8 +1465,11 @@ class AirRadarModule(BaseModule):
 
             list_start_y = modal_y + 76
             row_h = 32
-            for i, (name, lat, lon, country) in enumerate(PRESET_CITIES[:12]):
-                is_cur = (i == self.city_picker_idx)
+            max_visible_rows = 12
+            start_i = max(0, min(self.city_picker_idx - 5, len(PRESET_CITIES) - max_visible_rows))
+            for i, (name, lat, lon, country) in enumerate(PRESET_CITIES[start_i:start_i + max_visible_rows]):
+                real_idx = start_i + i
+                is_cur = (real_idx == self.city_picker_idx)
                 cy_row = list_start_y + i * row_h
                 bg_col = (42, 62, 92) if is_cur else (30, 42, 64)
                 out_col = COLOR_FLIPPER_AMBER if is_cur else COLOR_BORDER

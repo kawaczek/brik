@@ -1152,10 +1152,9 @@ json.dumps(py_mod.get_missing_tiles() if py_mod and hasattr(py_mod, 'get_missing
           let url = '';
           if (mode === 'SATELLITE') {
             url = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}.jpg`;
-          } else if (mode === 'VOYAGER') {
-            url = `https://basemaps.cartocdn.com/rastertiles/voyager/${z}/${x}/${y}.png`;
           } else {
-            url = `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
+            // Free open ArcGIS World Street Map: No API key required, full CORS support
+            url = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/${z}/${y}/${x}.jpg`;
           }
 
           try {

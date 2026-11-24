@@ -118,7 +118,7 @@ class MapTileManager:
         if key in self.mem_cache:
             return self.mem_cache[key]
 
-        ext = "jpg" if mode == "SATELLITE" else "png"
+        ext = "jpg"
         filepath = os.path.join(self.cache_dir, f"{mode.lower()}_{z}_{x}_{y}.{ext}")
 
         if os.path.exists(filepath):
@@ -131,12 +131,9 @@ class MapTileManager:
 
         if mode == "SATELLITE":
             url = f"https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}.jpg"
-        elif mode == "VOYAGER":
-            # CartoDB Voyager: Colorful, bright, crisp map with vivid terrain & water (Mario style)
-            url = f"https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"
         else:
-            # Standard OpenStreetMap
-            url = f"https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+            # ESRI World Street Map: Bright, vibrant, crisp colorful map (No API key required!)
+            url = f"https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}.jpg"
 
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "BrickDeck-AirRadar/2.0"})
@@ -225,11 +222,11 @@ class AirRadarModule(BaseModule):
         self.target_cam_lat = 52.7333
         self.target_cam_lon = 15.2333
 
-        # Map Modes: Colorful OSM (Mario Style) / Satellite (Google Earth) / Cyber 3D Globe
-        self.map_modes = ["VOYAGER", "SATELLITE", "CYBER"]
-        self.map_mode_idx = 0  # Default: Colorful bright map like Mario!
+        # Map Modes: Colorful Street Map (Google Maps style) / Satellite (Google Earth) / Cyber 3D Globe
+        self.map_modes = ["STREET", "SATELLITE", "CYBER"]
+        self.map_mode_idx = 0  # Default: Colorful bright street map!
         self.map_mode_names = [
-            "🎨 KOLOROWA OSM (Styl Mario)",
+            "🎨 KOLOROWA MAPA (Google Maps)",
             "🛰️ SATELITA (Google Earth)",
             "🌐 GLOBUS 3D (Super Mario World)"
         ]
@@ -971,12 +968,11 @@ class AirRadarModule(BaseModule):
         # 1. MAP LAYER RENDERING
         # ----------------------------------------------------------------------
         if cur_mode != "CYBER":
-            # High-Resolution Stitched Map: CartoDB Voyager (Mario style colorful OSM) or Satellite
+            # High-Resolution Stitched Map: ESRI World Street Map (Google Maps / Mario style) or Satellite
             if self.current_viewport_map:
                 canvas.image.paste(self.current_viewport_map, (vx, vy))
             else:
-                # Colorful sunny sky/ocean fallback
-                fallback_col = (170, 215, 230) if cur_mode == "VOYAGER" else (22, 36, 56)
+                fallback_col = (240, 240, 246) if cur_mode == "STREET" else (22, 36, 56)
                 canvas.draw.rectangle([(vx, vy), (vx + vw, vy + vh)], fill=fallback_col)
                 canvas.draw.text((cx - 85, cy - 8), "POBIERANIE KAFELKÓW MAPY...", fill=(20, 45, 80), font=get_font(11, bold=True))
         else:
@@ -1118,7 +1114,7 @@ class AirRadarModule(BaseModule):
                 canvas.draw.polygon([(tip_x, tip_y), (tail_l_x, tail_l_y), (ax, ay), (tail_r_x, tail_r_y)],
                                     fill=p_col, outline=(255, 255, 255))
                 fl_level = int(fl.get("alt_m", 10000) * 3.28084 / 100)
-                canvas.draw.text((ax + 12, ay - 8), f"{fl['callsign']}\nFL{fl_level:03d}", fill=(20, 35, 60) if cur_mode == "VOYAGER" else (255, 255, 255), font=font_plane)
+                canvas.draw.text((ax + 12, ay - 8), f"{fl['callsign']}\nFL{fl_level:03d}", fill=(20, 35, 60) if cur_mode == "STREET" else (255, 255, 255), font=font_plane)
 
         # ----------------------------------------------------------------------
         # 4. PHYSICAL GAMEPAD TARGET LOCK-ON HUD (TrimUI Brick)

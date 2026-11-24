@@ -1224,15 +1224,20 @@ if py_mod and hasattr(py_mod, 'handle_input'):
       }
     });
 
-    // Canvas Pointer support (mouse/touch drawing directly on screen for Sandbox, etc.)
+    // Canvas Pointer support (mouse hover, touch drawing, aircraft inspection)
+    let lastPointerTime = 0;
     function onCanvasPointer(e) {
       if (!isReady) return;
+      const now = performance.now();
+      if (e.type === 'pointermove' && (now - lastPointerTime < 28)) return;
+      lastPointerTime = now;
+
       const rect = canvas.getBoundingClientRect();
       const scaleX = canvas.width / rect.width;
       const scaleY = canvas.height / rect.height;
       const cx = (e.clientX - rect.left) * scaleX;
       const cy = (e.clientY - rect.top) * scaleY;
-      const isDown = (e.buttons === 1 || e.type === 'pointerdown' || e.type === 'pointermove');
+      const isDown = (e.buttons === 1 || e.type === 'pointerdown');
 
       pyodide.runPython(`
 if py_mod and hasattr(py_mod, 'handle_pointer'):
@@ -1244,8 +1249,18 @@ if py_mod and hasattr(py_mod, 'handle_pointer'):
     }
 
     canvas.addEventListener('pointerdown', onCanvasPointer);
-    canvas.addEventListener('pointermove', (e) => { if (e.buttons === 1) onCanvasPointer(e); });
+    canvas.addEventListener('pointermove', onCanvasPointer);
     canvas.addEventListener('pointerup', onCanvasPointer);
+
+    // Mouse wheel zoom support
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      if (e.deltaY < 0) {
+        sendKey('KEY_X');
+      } else if (e.deltaY > 0) {
+        sendKey('KEY_Y');
+      }
+    }, { passive: false });
 
     // 7. Display Scale Controls & Persistence
     const layoutEl = document.querySelector('.lab-layout');

@@ -112,4 +112,4 @@ class TamagotchiModule(BaseModule):
             elif self.selected_action == 3:
                 self.energy = 100
             return True
-        return False\n
+        return False

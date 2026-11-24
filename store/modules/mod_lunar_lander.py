@@ -112,4 +112,4 @@ class LunarLanderModule(BaseModule):
             self.state = "FLY"
             self._init_terrain()
             return True
-        return False\n
+        return False

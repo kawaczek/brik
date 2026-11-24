@@ -401,6 +401,45 @@
             "controls": "D-Pad: Wybór | L1/R1: Kategoria | A: Instaluj | X: Usuń | Y: Odśwież",
             "featured": true,
             "screenshot": "docs/screenshots/mod_store.png"
+        },
+        {
+            "id": "mod_tamagotchi",
+            "name": "CyberPet Virtual Monster",
+            "version": "1.0.0",
+            "category": "Gry & 3D",
+            "author": "kawaczek",
+            "description": "Kieszonkowy wirtualny cyber-bot na ekranie konsoli. Karmienie, czyszczenie, minigry i ewolucja.",
+            "size_kb": 18,
+            "download_url": "https://raw.githubusercontent.com/kawaczek/brik/main/store/modules/mod_tamagotchi.py",
+            "controls": "D-Pad: Akcja | A: Wybierz | X: Minigra | B: Status",
+            "featured": true,
+            "screenshot": "docs/screenshots/mod_tamagotchi.png"
+        },
+        {
+            "id": "mod_pipe_hack",
+            "name": "Circuit Conduit & Pipe Hacker",
+            "version": "1.0.0",
+            "category": "Gry & 3D",
+            "author": "kawaczek",
+            "description": "Gra logiczno-zręcznościowa na czas w stylu BioShock / Pipemania: obracanie złączy magistrali, by doprowadzić impuls danych do rdzenia.",
+            "size_kb": 19,
+            "download_url": "https://raw.githubusercontent.com/kawaczek/brik/main/store/modules/mod_pipe_hack.py",
+            "controls": "D-Pad: Kursor węzła | A: Obróć złącze | X: Test sygnału | Y: Nowa matryca",
+            "featured": true,
+            "screenshot": "docs/screenshots/mod_pipe_hack.png"
+        },
+        {
+            "id": "mod_lunar_lander",
+            "name": "Apollo Cyber Lander 2D",
+            "version": "1.0.0",
+            "category": "Gry & 3D",
+            "author": "kawaczek",
+            "description": "Fizyczny symulator lądowania na obcej planecie 2D: ciąg główny pod A, silniki manewrowe RCS D-Padem i lądowanie < 2 m/s na platformie.",
+            "size_kb": 18,
+            "download_url": "https://raw.githubusercontent.com/kawaczek/brik/main/store/modules/mod_lunar_lander.py",
+            "controls": "A: Ciąg główny | D-Pad: Obrót RCS | Y: Nowe lądowanie",
+            "featured": true,
+            "screenshot": "docs/screenshots/mod_lunar_lander.png"
         }
     ]
 }

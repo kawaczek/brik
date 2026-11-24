@@ -95,4 +95,4 @@ class PipeHackModule(BaseModule):
         elif event == "KEY_A":
             self.rotations[self.cursor_y][self.cursor_x] = (self.rotations[self.cursor_y][self.cursor_x] + 1) % 4
             return True
-        return False\n
+        return False

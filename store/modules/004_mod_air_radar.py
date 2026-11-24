@@ -68,7 +68,7 @@ CONTINENTS_GEO = [
 class AirRadarModule(BaseModule):
     name = "Global Aerospace & Satellite Radar"
     short_name = "AeroSpace"
-    icon = "🛰️"
+    icon = "★"
     accent_color = COLOR_ELECTRIC_BLUE
 
     def __init__(self, app_context=None):
@@ -223,7 +223,7 @@ class AirRadarModule(BaseModule):
                         })
                     if parsed:
                         self.flights = parsed
-                        self.status_msg = f"LIVE ADS-B ({len(parsed)} wozów) & ISS"
+                        self.status_msg = f"LIVE ADS-B ({len(parsed)} samolotów) & ISS"
                         self.last_fetch_time = time.time()
         except Exception:
             if not self.flights:
@@ -430,7 +430,7 @@ class AirRadarModule(BaseModule):
             canvas.draw.ellipse([(ox - 6, oy - 6), (ox + 6, oy + 6)], outline=COLOR_FLIPPER_AMBER, width=2)
             canvas.draw.line([(ox - 10, oy), (ox + 10, oy)], fill=COLOR_FLIPPER_AMBER, width=1)
             canvas.draw.line([(ox, oy - 10), (ox, oy + 10)], fill=COLOR_FLIPPER_AMBER, width=1)
-            canvas.draw.text((ox + 10, oy - 14), f"🎯 {self.obs_name}", fill=COLOR_FLIPPER_AMBER, font=get_font(11, bold=True))
+            canvas.draw.text((ox + 10, oy - 14), f"● {self.obs_name}", fill=COLOR_FLIPPER_AMBER, font=get_font(11, bold=True))
 
         # Bottom Zoom Slider & Orientation Info
         z_y = vy + vh + 12
@@ -455,14 +455,14 @@ class AirRadarModule(BaseModule):
         # 1. Observer Station Box
         canvas.draw.rounded_rectangle([(rx, ry), (rx + rw, ry + 115)], radius=8, fill=(22, 28, 38), outline=COLOR_CYBER_CYAN, width=1)
         canvas.draw.text((rx + 12, ry + 10), "STACJA OBSERWACYJNA:", fill=COLOR_TEXT_SECONDARY, font=get_font(10, bold=True))
-        canvas.draw.text((rx + 12, ry + 26), f"🎯 {self.obs_name[:20]}", fill=COLOR_TEXT_PRIMARY, font=get_font(14, bold=True))
+        canvas.draw.text((rx + 12, ry + 26), f"● {self.obs_name[:20]}", fill=COLOR_TEXT_PRIMARY, font=get_font(14, bold=True))
         canvas.draw.text((rx + 12, ry + 48), f"GPS: {self.obs_lat:.4f}°N, {self.obs_lon:.4f}°E", fill=COLOR_CYBER_CYAN, font=get_font(11, bold=False))
         canvas.draw_badge(rx + 12, ry + 78, "[B] ZMIEŃ MIASTO / GPS", bg_color=(36, 52, 72), text_color=COLOR_FLIPPER_AMBER)
 
         # 2. ISS Real-Time Flight Card
         iss_y = ry + 128
         canvas.draw.rounded_rectangle([(rx, iss_y), (rx + rw, iss_y + 200)], radius=8, fill=(20, 26, 36), outline=COLOR_FLIPPER_AMBER, width=1)
-        canvas.draw.text((rx + 12, iss_y + 10), "🛰️ MIĘDZYNARODOWA STACJA (ISS)", fill=COLOR_FLIPPER_AMBER, font=get_font(12, bold=True))
+        canvas.draw.text((rx + 12, iss_y + 10), "★ MIĘDZYNARODOWA STACJA (ISS)", fill=COLOR_FLIPPER_AMBER, font=get_font(12, bold=True))
         canvas.draw.line([(rx + 12, iss_y + 30), (rx + rw - 12, iss_y + 30)], fill=COLOR_BORDER, width=1)
 
         iss_items = [

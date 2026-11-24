@@ -643,6 +643,15 @@
             pyodide.FS.writeFile("/default.ttf", new Uint8Array(fontBuf));
             log("[+] Załadowano pełną czcionkę TrueType z polskimi znakami (DejaVu Sans).");
           }
+
+          let boldResp = await fetch("assets/fonts/default-bold.ttf?v=" + Date.now());
+          if (!boldResp.ok) {
+            boldResp = await fetch("https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans-Bold.ttf");
+          }
+          if (boldResp.ok) {
+            const boldBuf = await boldResp.arrayBuffer();
+            pyodide.FS.writeFile("/default-bold.ttf", new Uint8Array(boldBuf));
+          }
         } catch(fErr) {
           log("[*] Czcionka domyślna Pillow aktywna.");
         }
@@ -685,6 +694,11 @@ if "flipper_proto" not in sys.modules:
 # 4. BrickDeck Core Engine Shims
 def get_font(size=14, bold=False):
     import os
+    if bold and os.path.exists("/default-bold.ttf"):
+        try:
+            return ImageFont.truetype("/default-bold.ttf", size)
+        except Exception:
+            pass
     if os.path.exists("/default.ttf"):
         try:
             return ImageFont.truetype("/default.ttf", size)

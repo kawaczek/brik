@@ -656,24 +656,30 @@ py_mod = None
     }
 
     // 3. Load Modules List from store/registry.json
+    let registryData = null;
     async function loadModuleCatalog() {
       try {
         const res = await fetch('store/registry.json');
         if (res.ok) {
-          const data = await res.json();
+          registryData = await res.json();
           moduleSelect.innerHTML = '';
-          data.modules.forEach(m => {
+          registryData.modules.forEach(m => {
             const opt = document.createElement('option');
             opt.value = m.id;
             opt.textContent = `${m.name} [${m.category}]`;
             moduleSelect.appendChild(opt);
           });
-          if (data.modules.some(m => m.id === currentModId)) {
-            moduleSelect.value = currentModId;
-          } else {
-            moduleSelect.value = "mod_raycaster";
-            currentModId = "mod_raycaster";
-          }
+          const query = currentModId;
+          const target = registryData.modules.find(m =>
+            m.id === query ||
+            m.legacy_id === query ||
+            m.num === query ||
+            m.num === query.toString().padStart(3, '0') ||
+            m.id.endsWith(query) ||
+            m.id.includes(query)
+          );
+          currentModId = target ? target.id : registryData.modules[0].id;
+          moduleSelect.value = currentModId;
         }
       } catch (e) {
         log("[-] Nie udało się wczytać registry.json: " + e.message);
@@ -844,7 +850,9 @@ if py_mod and hasattr(py_mod, 'handle_input'):
     });
 
     document.getElementById('btnCopyWasmLink').addEventListener('click', () => {
-      const shareUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?app=' + currentModId;
+      const target = registryData ? registryData.modules.find(m => m.id === currentModId) : null;
+      const shareParam = target ? target.num : currentModId;
+      const shareUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?app=' + shareParam;
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(shareUrl).then(() => {
           log(`[+] Skopiowano bezpośredni link: ${shareUrl}`);

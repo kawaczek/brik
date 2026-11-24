@@ -2,80 +2,88 @@
 # -*- coding: utf-8 -*-
 """
 tools/generate_screenshots.py - Headless Screenshot Generator for BrickDeck OS
-Renders 1024x768 PNG screenshots for every module in Apps/BrickDeck/modules and store/modules.
+Renders 1024x768 PNG screenshots for every module in store/registry.json.
 """
 
 import os
 import sys
-import importlib
+import json
 import importlib.util
-import traceback
 from PIL import Image
 
-sys.path.insert(0, os.path.abspath("Apps/BrickDeck"))
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(REPO_ROOT, "Apps", "BrickDeck"))
 from core.canvas import Canvas
 
-OUTPUT_DIR = os.path.abspath("docs/screenshots")
+REGISTRY_PATH = os.path.join(REPO_ROOT, "store", "registry.json")
+STORE_DIR = os.path.join(REPO_ROOT, "store", "modules")
+OUTPUT_DIR = os.path.join(REPO_ROOT, "docs", "screenshots")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-MODULE_DIRS = [
-    ("Apps/BrickDeck/modules", "modules"),
-    ("store/modules", "store.modules")
-]
-
 def generate_all():
+    with open(REGISTRY_PATH, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    modules = data.get("modules", [])
+    print(f"[*] Starting screenshot generation for {len(modules)} modules...")
+
     generated = 0
     errors = 0
 
-    for dir_path, pkg_prefix in MODULE_DIRS:
-        if not os.path.exists(dir_path):
+    for m in modules:
+        canon_id = m["id"]
+        legacy_id = m.get("legacy_id", canon_id)
+        py_path = os.path.join(STORE_DIR, f"{canon_id}.py")
+        out_canon = os.path.join(OUTPUT_DIR, f"{canon_id}.png")
+        out_legacy = os.path.join(OUTPUT_DIR, f"{legacy_id}.png")
+
+        if not os.path.exists(py_path):
+            print(f"[-] Missing python file: {py_path}")
+            errors += 1
             continue
 
-        for fname in sorted(os.listdir(dir_path)):
-            if not fname.startswith("mod_") or not fname.endswith(".py"):
+        try:
+            spec = importlib.util.spec_from_file_location(canon_id, py_path)
+            mod_obj = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod_obj)
+
+            cls = None
+            for attr_name in dir(mod_obj):
+                attr = getattr(mod_obj, attr_name)
+                if isinstance(attr, type) and attr_name.endswith("Module") and attr_name != "BaseModule":
+                    cls = attr
+                    break
+
+            if not cls:
+                print(f"[-] No Module class found in {canon_id}")
+                errors += 1
                 continue
 
-            mod_id = fname[:-3]
-            out_file = os.path.join(OUTPUT_DIR, f"{mod_id}.png")
+            instance = cls()
+            canvas = Canvas(1024, 768)
 
-            try:
-                # Import module dynamically
-                if pkg_prefix == "modules":
-                    mod_obj = importlib.import_module(f"modules.{mod_id}")
-                else:
-                    spec = importlib.util.spec_from_file_location(mod_id, os.path.join(dir_path, fname))
-                    mod_obj = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(mod_obj)
+            # Warm-up tick
+            instance.update(0.016)
 
-                # Find module class
-                cls = None
-                for attr_name in dir(mod_obj):
-                    attr = getattr(mod_obj, attr_name)
-                    if isinstance(attr, type) and attr_name.endswith("Module") and attr_name != "BaseModule":
-                        cls = attr
-                        break
+            # Render
+            instance.render(canvas)
 
-                if not cls:
-                    print(f"[-] No Module class found in {fname}")
-                    continue
+            # Save canonical screenshot
+            canvas.image.save(out_canon, "PNG", optimize=True)
 
-                instance = cls()
-                canvas = Canvas(1024, 768)
+            # Create or update legacy symlink / copy
+            if out_legacy != out_canon:
+                if os.path.lexists(out_legacy):
+                    os.remove(out_legacy)
+                os.symlink(f"{canon_id}.png", out_legacy)
 
-                # Warm-up tick
-                instance.update(0.016)
+            sz_kb = os.path.getsize(out_canon) // 1024
+            print(f"[+] Rendered [{m['num']}/86]: {canon_id}.png ({sz_kb} KB)")
+            generated += 1
 
-                # Render to canvas
-                instance.render(canvas)
-
-                # Save screenshot
-                canvas.image.save(out_file, "PNG", optimize=True)
-                print(f"[+] Rendered: {mod_id}.png ({os.path.getsize(out_file) // 1024} KB)")
-                generated += 1
-
-            except Exception as e:
-                print(f"[!] Error rendering {mod_id}: {e}")
-                errors += 1
+        except Exception as e:
+            print(f"[!] Error rendering {canon_id}: {e}")
+            errors += 1
 
     print(f"\nDone! Successfully generated {generated} screenshots. Errors: {errors}")
 

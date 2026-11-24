@@ -480,11 +480,15 @@
 
     <!-- STORE SECTION -->
     <section id="store" class="container">
-      <h2 class="section-title">Katalog Aplikacji & Modułów</h2>
-      <p class="section-sub">Przeglądaj moduły online. Możesz je instalować na konsoli jednym przyciskiem w aplikacji <code>mod_store.py</code> lub pobierać pojedyncze pliki <code>.py</code> na kartę SD.</p>
+      <h2 class="section-title">Katalog Aplikacji & Modułów (86 Modułów 001..086)</h2>
+      <p class="section-sub">Przeglądaj moduły online z numeracją 001..086. Możesz je instalować na konsoli jednym przyciskiem w aplikacji <code>mod_store.py</code> lub pobierać pojedyncze pliki <code>.py</code> na kartę SD.</p>
+
+      <div style="margin: 0 auto 20px; max-width: 600px; display: flex; gap: 10px;">
+        <input type="text" id="appSearchInput" placeholder="🔍 Szukaj po numerze lub nazwie (np. 028, 42, raycaster, krypto, gps)..." style="flex:1; background:#0e1522; border:1px solid #2a3a50; color:#d8e5f5; padding:12px 18px; border-radius:8px; font-family:var(--font-mono); font-size:14px; outline:none;">
+      </div>
 
       <div class="filter-bar" id="filterBar">
-        <button class="filter-btn active" data-cat="all">Wszystkie</button>
+        <button class="filter-btn active" data-cat="all">Wszystkie (86)</button>
         <button class="filter-btn" data-cat="Gry & 3D">Gry & 3D</button>
         <button class="filter-btn" data-cat="Cyber & Hacking">Cyber & Hacking</button>
         <button class="filter-btn" data-cat="Narzędzia & Net">Narzędzia & Net</button>
@@ -1310,13 +1314,24 @@
     });
 
     // Public helper to launch any app from store buttons
-    window.launchInSimulator = function(modId) {
+    window.launchInSimulator = function(query) {
+      if (!query) return;
+      const target = allModules.find(m => 
+        m.id === query || 
+        m.legacy_id === query ||
+        m.num === query ||
+        m.num === query.toString().padStart(3, '0') ||
+        m.id.endsWith(query) ||
+        m.id.includes(query)
+      );
+      const modId = target ? target.id : query;
       currentDemo = modId;
       demoSelect.value = modId;
       currentModuleIdx = allModules.findIndex(m => m.id === modId);
+      if (currentModuleIdx < 0) currentModuleIdx = 0;
       isLauncherOpen = false;
       try {
-        const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?play=' + modId;
+        const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?play=' + (target ? target.num : modId);
         window.history.replaceState({ path: newUrl }, '', newUrl);
       } catch(err) {}
       document.getElementById('demo').scrollIntoView({ behavior: 'smooth' });
@@ -1324,7 +1339,9 @@
 
     // Public helper to copy direct deep link
     window.copyDirectLink = function(modId, e) {
-      const shareUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?play=' + modId;
+      const target = allModules.find(m => m.id === modId || m.legacy_id === modId);
+      const param = target ? target.num : modId;
+      const shareUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?play=' + param;
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(shareUrl).then(() => {
           if (e && e.target) {
@@ -1440,6 +1457,8 @@
     // STORE CATALOG LOADER & CARDS
     // ========================================================
     let modulesData = [];
+    let currentFilterCat = 'all';
+    let currentSearchQuery = '';
 
     async function loadModules() {
       try {
@@ -1447,6 +1466,32 @@
         if (res.ok) {
           const data = await res.json();
           modulesData = data.modules || [];
+          if (modulesData.length > 0) {
+            allModules = modulesData.map(m => ({
+              id: m.id,
+              legacy_id: m.legacy_id || m.id,
+              num: m.num || "000",
+              name: m.name,
+              category: m.category,
+              interactive: ['028_mod_raycaster', '021_mod_sandbox', '031_mod_tamagotchi', '029_mod_artillery', '034_mod_asteroids', '036_mod_life'].includes(m.id) || ['mod_raycaster', 'mod_sandbox', 'mod_tamagotchi', 'mod_artillery', 'mod_asteroids', 'mod_life'].includes(m.legacy_id)
+            }));
+            // Update Dropdown Selector with all 86 modules
+            demoSelect.innerHTML = '';
+            allModules.forEach(m => {
+              const opt = document.createElement('option');
+              opt.value = m.id;
+              opt.textContent = m.name;
+              demoSelect.appendChild(opt);
+            });
+            // Preload all 86 screenshots
+            allModules.forEach(m => {
+              if (!screenshotCache[m.id]) {
+                const img = new Image();
+                img.src = `docs/screenshots/${m.id}.png`;
+                screenshotCache[m.id] = img;
+              }
+            });
+          }
         }
       } catch (err) {
         console.warn('Fallback store load');
@@ -1456,26 +1501,41 @@
     }
 
     function renderCards(category) {
+      currentFilterCat = category;
       const grid = document.getElementById('appsGrid');
       grid.innerHTML = '';
 
-      const filtered = (category === 'all') 
+      let filtered = (category === 'all') 
         ? modulesData 
         : modulesData.filter(m => m.category === category);
 
+      if (currentSearchQuery) {
+        const q = currentSearchQuery;
+        filtered = filtered.filter(m => 
+          (m.num && m.num.includes(q)) ||
+          (m.name && m.name.toLowerCase().includes(q)) ||
+          (m.id && m.id.toLowerCase().includes(q)) ||
+          (m.description && m.description.toLowerCase().includes(q))
+        );
+      }
+
       if (!filtered.length) {
-        grid.innerHTML = '<p style="color:var(--text-muted); grid-column: 1/-1;">Brak modułów w wybranej kategorii.</p>';
+        grid.innerHTML = '<p style="color:var(--text-muted); grid-column: 1/-1; text-align:center; padding:30px;">Nie znaleziono modułów spełniających kryteria.</p>';
         return;
       }
 
       filtered.forEach(m => {
         const card = document.createElement('div');
         card.className = 'card';
+        const displayName = m.name.replace(/^\\d+\\s*\\/\\/\\s*/, '');
         card.innerHTML = `
           <div>
-            <img src="docs/screenshots/${m.id}.png" alt="${m.name}" class="card-img" loading="lazy" onerror="this.style.display='none'">
+            <img src="docs/screenshots/${m.id}.png" alt="${m.name}" class="card-img" loading="lazy" onerror="this.src='docs/screenshots/${m.legacy_id || m.id}.png'">
             <div class="card-top">
-              <div class="card-title">${m.name}</div>
+              <div class="card-title" style="display:flex; align-items:center; gap:8px;">
+                <span style="background:rgba(255,170,0,0.18); border:1px solid var(--accent-amber); color:var(--accent-amber); font-size:11px; padding:2px 7px; border-radius:4px; font-family:var(--font-mono); font-weight:bold;">#${m.num}</span>
+                <span>${displayName}</span>
+              </div>
               <span class="card-tag">${m.category}</span>
             </div>
             <p class="card-desc">${m.description}</p>
@@ -1490,7 +1550,7 @@
                 <button onclick="launchInSimulator('${m.id}')" class="card-btn" style="flex:1; background:var(--accent-purple); color:#fff; border-color:var(--accent-purple);">
                   🎮 Zagraj
                 </button>
-                <a href="wasm.html?app=${m.id}" class="card-btn" style="flex:1; background:rgba(255,170,0,0.15); color:var(--accent-amber); border-color:var(--accent-amber); text-align:center;">
+                <a href="wasm.html?app=${m.num}" class="card-btn" style="flex:1; background:rgba(255,170,0,0.15); color:var(--accent-amber); border-color:var(--accent-amber); text-align:center;">
                   🐍 WASM
                 </a>
               </div>
@@ -1517,12 +1577,20 @@
       });
     });
 
+    const searchInput = document.getElementById('appSearchInput');
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        currentSearchQuery = e.target.value.toLowerCase().trim();
+        renderCards(currentFilterCat);
+      });
+    }
+
     loadModules().then(() => {
       // Check URL query param ?play=... or ?app=... or hash #...
       try {
         const urlParams = new URLSearchParams(window.location.search);
         const targetApp = urlParams.get('play') || urlParams.get('app') || window.location.hash.replace('#', '');
-        if (targetApp && allModules.some(m => m.id === targetApp)) {
+        if (targetApp) {
           setTimeout(() => {
             launchInSimulator(targetApp);
           }, 200);

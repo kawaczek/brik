@@ -126,10 +126,12 @@ class BrickDeckApp:
 
         # 2. Auto-discovery of new modules not present in modules.json
         if auto_discover and os.path.exists(modules_dir):
-            discovered_files = sorted(glob.glob(os.path.join(modules_dir, "mod_*.py")))
+            discovered_files = sorted(glob.glob(os.path.join(modules_dir, "*.py")))
             new_entries = []
             for filepath in discovered_files:
                 filename = os.path.basename(filepath)
+                if filename.startswith("__") or os.path.islink(filepath):
+                    continue
                 mod_id = os.path.splitext(filename)[0]
                 if mod_id not in configured_ids:
                     mod_instance = self._instantiate_module(mod_id)

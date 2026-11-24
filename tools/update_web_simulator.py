@@ -2,33 +2,91 @@
 # -*- coding: utf-8 -*-
 """
 tools/update_web_simulator.py - Integrates all 39 modules into TrimUI Brick Web Simulator
+AND adds the optional Python WASM (Pyodide) runner for executing raw .py files!
 """
 
 import os
-import re
 
 INDEX_PATH = "index.html"
 
 with open(INDEX_PATH, "r", encoding="utf-8") as f:
     content = f.read()
 
-# Replace the script section in index.html with the expanded simulator
-SCRIPT_START = "  <!-- JAVASCRIPT: VIRTUAL CONSOLE SIMULATOR & STORE LOADER -->"
-if SCRIPT_START not in content:
-    # Try alternative search
-    SCRIPT_START = "<script>"
+# 1. Update the CSS to include .wasm-toggle-btn
+if ".wasm-toggle-btn" not in content:
+    css_insert = """
+    /* Python WASM Toggle Button */
+    .wasm-toggle-btn {
+      background: rgba(20, 30, 45, 0.85);
+      border: 1px solid var(--accent-amber);
+      color: var(--accent-amber);
+      padding: 5px 12px;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .wasm-toggle-btn:hover {
+      background: var(--accent-amber);
+      color: #0b0f19;
+      box-shadow: 0 0 10px rgba(255, 170, 0, 0.4);
+    }
+    .wasm-toggle-btn.active {
+      background: var(--accent-green);
+      border-color: var(--accent-green);
+      color: #0b0f19;
+      font-weight: 700;
+      box-shadow: 0 0 12px rgba(0, 255, 136, 0.5);
+    }
+    """
+    content = content.replace("/* Container */", css_insert + "\n    /* Container */")
 
+# 2. Update the header bar inside .screen-header-bar
+old_header_pattern = """            <div class="screen-header-bar">
+              <span>⚡ BRICKDECK OS // IPS DISPLAY</span>
+              <div>
+                <label>MODUŁ: </label>
+                <select id="demoSelect" class="demo-selector">"""
+
+new_header_pattern = """            <div class="screen-header-bar">
+              <span>⚡ BRICKDECK OS // IPS DISPLAY</span>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <label>MODUŁ: </label>
+                <select id="demoSelect" class="demo-selector">
+                </select>
+                <button id="btnToggleWasm" class="wasm-toggle-btn" title="Opcjonalny tryb Pyodide WebAssembly (odpala surowy kod Pythona w przeglądarce)">
+                  🐍 Tryb Python WASM (Opcja)
+                </button>
+              </div>
+            </div>"""
+
+if 'id="btnToggleWasm"' not in content:
+    # replace until </select>
+    start_pos = content.find('<div class="screen-header-bar">')
+    end_pos = content.find('</select>', start_pos) + len('</select>')
+    # also include enclosing </div> if needed
+    after_select = content.find('</div>', end_pos) + len('</div>')
+    old_block = content[start_pos:after_select]
+    content = content[:start_pos] + new_header_pattern + content[after_select:]
+
+# 3. Update the script section
 parts = content.split("  <script>")
 html_prefix = parts[0]
 
 new_script = """  <script>
     // ========================================================
     // BRICKDECK OS // UNIVERSAL TRIMUI BRICK SIMULATOR (ALL 39 APPS)
+    // + OPTIONAL PYTHON WEBASSEMBLY (PYODIDE) ENGINE
     // ========================================================
 
     const canvas = document.getElementById('brickCanvas');
     const ctx = canvas.getContext('2d');
     const demoSelect = document.getElementById('demoSelect');
+    const btnToggleWasm = document.getElementById('btnToggleWasm');
 
     // Input state
     const inputState = {
@@ -121,7 +179,173 @@ new_script = """  <script>
     populateDropdown();
 
     // ========================================================
-    // INTERACTIVE ENGINES FOR CORE MODULES
+    // OPTIONAL PYTHON WEBASSEMBLY (PYODIDE) ENGINE
+    // ========================================================
+    let wasmActive = false;
+    let wasmLoaded = false;
+    let wasmLoading = false;
+    let wasmStatus = "";
+    let pyodideInstance = null;
+    let wasmOffscreenCanvas = document.createElement('canvas');
+    wasmOffscreenCanvas.width = 1024;
+    wasmOffscreenCanvas.height = 768;
+    let wasmOffCtx = wasmOffscreenCanvas.getContext('2d');
+
+    async function initPyodideWasm() {
+      if (wasmLoaded || wasmLoading) return;
+      wasmLoading = true;
+      wasmStatus = "Pobieranie silnika Pyodide WASM...";
+
+      try {
+        if (!window.loadPyodide) {
+          await new Promise((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js";
+            s.onload = resolve;
+            s.onerror = reject;
+            document.head.appendChild(s);
+          });
+        }
+
+        wasmStatus = "Inicjalizacja maszyny wirtualnej CPython...";
+        pyodideInstance = await loadPyodide();
+
+        wasmStatus = "Ładowanie biblioteki graficznej Pillow (PIL)...";
+        await pyodideInstance.loadPackage("pillow");
+
+        wasmStatus = "Wstrzykiwanie środowiska BrickDeck Core...";
+        pyodideInstance.runPython(`
+import sys, types
+from PIL import Image, ImageDraw, ImageFont
+
+def get_font(size=14, bold=False):
+    return ImageFont.load_default()
+
+class Canvas:
+    def __init__(self, width=1024, height=768):
+        self.width = width
+        self.height = height
+        self.image = Image.new("RGBA", (width, height), (10, 15, 24, 255))
+        self.draw = ImageDraw.Draw(self.image)
+    def clear(self, bg_color=(10, 15, 24, 255)):
+        self.draw.rectangle([(0, 0), (self.width, self.height)], fill=bg_color)
+    def draw_card(self, x, y, w, h, title="", subtitle="", border_color=(0, 200, 255), fill_color=(16, 24, 36)):
+        self.draw.rounded_rectangle([(x, y), (x + w, y + h)], radius=8, fill=fill_color, outline=border_color, width=2)
+        if title:
+            self.draw.text((x + 14, y + 12), title, fill=(240, 245, 255), font=get_font(15, bold=True))
+        if subtitle:
+            self.draw.text((x + 14, y + 36), subtitle, fill=(130, 160, 190), font=get_font(12))
+    def draw_badge(self, x, y, text, bg_color=(30, 45, 65), text_color=(240, 245, 255)):
+        bw = len(text) * 8 + 14
+        self.draw.rounded_rectangle([(x, y), (x + bw, y + 24)], radius=4, fill=bg_color, outline=(0, 200, 255))
+        self.draw.text((x + 6, y + 4), text, fill=text_color, font=get_font(11, bold=True))
+
+class BaseModule:
+    def __init__(self, app_context=None):
+        self.app_context = app_context
+    def update(self, dt): pass
+    def render(self, canvas): pass
+    def handle_input(self, event): return False
+    def get_hotkey_hints(self): return []
+
+c_mod = types.ModuleType("core.canvas")
+c_mod.Canvas = Canvas
+c_mod.get_font = get_font
+
+b_mod = types.ModuleType("core.module_base")
+b_mod.BaseModule = BaseModule
+
+core_pkg = types.ModuleType("core")
+core_pkg.canvas = c_mod
+core_pkg.module_base = b_mod
+
+sys.modules["core"] = core_pkg
+sys.modules["core.canvas"] = c_mod
+sys.modules["core.module_base"] = b_mod
+
+py_canvas = Canvas()
+py_mod = None
+`);
+        wasmLoaded = true;
+        wasmLoading = false;
+        await loadRawPythonModule(currentDemo);
+      } catch (err) {
+        console.error("Pyodide WASM error:", err);
+        wasmStatus = "Błąd ładowania Pyodide WASM.";
+        wasmLoading = false;
+        wasmActive = false;
+        btnToggleWasm.classList.remove('active');
+        btnToggleWasm.textContent = "🐍 Tryb Python WASM (Opcja)";
+      }
+    }
+
+    async function loadRawPythonModule(modId) {
+      if (!wasmLoaded || !pyodideInstance) return;
+      wasmStatus = `Pobieranie ${modId}.py z repozytorium...`;
+      try {
+        let code = "";
+        let resp = await fetch(`store/modules/${modId}.py`);
+        if (!resp.ok) {
+          resp = await fetch(`Apps/BrickDeck/modules/${modId}.py`);
+        }
+        if (resp.ok) {
+          code = await resp.text();
+        } else {
+          throw new Error("Nie można pobrać pliku .py");
+        }
+
+        pyodideInstance.globals.set("raw_py_code", code);
+        pyodideInstance.globals.set("raw_mod_id", modId);
+
+        pyodideInstance.runPython(`
+import sys
+
+# Clean previous module
+if 'user_mod' in sys.modules:
+    del sys.modules['user_mod']
+
+# Create and exec module namespace
+user_mod = types.ModuleType("user_mod")
+exec(raw_py_code, user_mod.__dict__)
+
+# Find Module Class
+mod_cls = None
+for attr_name in dir(user_mod):
+    if attr_name.endswith("Module") and attr_name != "BaseModule":
+        mod_cls = getattr(user_mod, attr_name)
+        break
+
+if mod_cls:
+    py_mod = mod_cls()
+    py_canvas.clear()
+else:
+    py_mod = None
+`);
+        wasmStatus = "";
+      } catch (e) {
+        console.warn("WASM Module Load Fallback:", e);
+        wasmStatus = `Błąd uruchamiania ${modId}.py w WASM.`;
+      }
+    }
+
+    btnToggleWasm.addEventListener('click', async () => {
+      wasmActive = !wasmActive;
+      if (wasmActive) {
+        btnToggleWasm.classList.add('active');
+        btnToggleWasm.textContent = "🐍 Python WASM: AKTYWNY";
+        if (!wasmLoaded) {
+          await initPyodideWasm();
+        } else {
+          await loadRawPythonModule(currentDemo);
+        }
+      } else {
+        btnToggleWasm.classList.remove('active');
+        btnToggleWasm.textContent = "🐍 Tryb Python WASM (Opcja)";
+      }
+    });
+
+    // ========================================================
+    // INTERACTIVE ENGINES FOR CORE MODULES (FAST JS ENGINE)
     // ========================================================
 
     // 1. Raycaster 3D
@@ -141,8 +365,7 @@ new_script = """  <script>
         1,1,1,1,1,1,1,1,1,1,1,1
       ],
       mapW: 12, mapH: 12,
-      px: 2.5, py: 2.5, angle: 0.2,
-      score: 1500,
+      px: 2.5, py: 2.5, angle: 0.2, score: 1500,
       update() {
         const spd = (inputState.b ? 0.08 : 0.045);
         if (inputState.left) this.angle -= 0.045;
@@ -186,7 +409,6 @@ new_script = """  <script>
             ctx.fillStyle = col; ctx.fillRect(r * sliceW, top, sliceW + 1, lineH);
           }
         }
-        // Minimap
         const mmSz = 80, cs = mmSz / this.mapW;
         ctx.fillStyle = 'rgba(6, 10, 16, 0.85)'; ctx.fillRect(w - mmSz - 12, 12, mmSz, mmSz);
         ctx.strokeStyle = '#00f0ff'; ctx.strokeRect(w - mmSz - 12, 12, mmSz, mmSz);
@@ -202,9 +424,7 @@ new_script = """  <script>
 
     // 2. Powder & Physics Sandbox
     const sandDemo = {
-      gw: 100, gh: 75,
-      grid: new Uint8Array(100 * 75),
-      brushX: 50, brushY: 30, material: 1,
+      gw: 100, gh: 75, grid: new Uint8Array(100 * 75), brushX: 50, brushY: 30, material: 1,
       init() {
         this.grid.fill(0);
         for (let x = 10; x < 90; x++) this.grid[65 * this.gw + x] = 5;
@@ -227,16 +447,16 @@ new_script = """  <script>
         for (let y = this.gh - 2; y >= 1; y--) {
           for (let x = 1; x < this.gw - 1; x++) {
             const idx = y * this.gw + x, elem = this.grid[idx];
-            if (elem === 1) { // Sand
+            if (elem === 1) {
               const b = (y + 1) * this.gw + x;
               if (this.grid[b] === 0 || this.grid[b] === 2) { const s = this.grid[b]; this.grid[b] = 1; this.grid[idx] = s; }
               else if (this.grid[b - 1] === 0) { this.grid[b - 1] = 1; this.grid[idx] = 0; }
               else if (this.grid[b + 1] === 0) { this.grid[b + 1] = 1; this.grid[idx] = 0; }
-            } else if (elem === 2) { // Water
+            } else if (elem === 2) {
               const b = (y + 1) * this.gw + x;
               if (this.grid[b] === 0) { this.grid[b] = 2; this.grid[idx] = 0; }
               else { const d = Math.random() < 0.5 ? -1 : 1; if (this.grid[y * this.gw + (x + d)] === 0) { this.grid[y * this.gw + (x + d)] = 2; this.grid[idx] = 0; } }
-            } else if (elem === 3) { // Fire
+            } else if (elem === 3) {
               if (Math.random() < 0.15) this.grid[idx] = 0;
               else if (this.grid[(y - 1) * this.gw + x] === 0) { this.grid[(y - 1) * this.gw + x] = 3; this.grid[idx] = 0; }
             }
@@ -336,7 +556,6 @@ new_script = """  <script>
         this.shipX = (this.shipX + this.vx + 640) % 640;
         this.shipY = (this.shipY + this.vy + 480) % 480;
         this.vx *= 0.98; this.vy *= 0.98;
-
         if (inputState.a) {
           this.bullets.push({ x: this.shipX, y: this.shipY, vx: Math.cos(this.shipAngle) * 7, vy: Math.sin(this.shipAngle) * 7, ttl: 40 });
           inputState.a = false;
@@ -348,15 +567,10 @@ new_script = """  <script>
       render() {
         const w = canvas.width, h = canvas.height;
         ctx.fillStyle = '#060a12'; ctx.fillRect(0, 0, w, h);
-        // Draw Asteroids
         ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 2;
-        this.asteroids.forEach(a => {
-          ctx.beginPath(); ctx.arc(a.x, a.y, a.r, 0, Math.PI * 2); ctx.stroke();
-        });
-        // Bullets
+        this.asteroids.forEach(a => { ctx.beginPath(); ctx.arc(a.x, a.y, a.r, 0, Math.PI * 2); ctx.stroke(); });
         ctx.fillStyle = '#ffea00';
         this.bullets.forEach(b => { ctx.beginPath(); ctx.arc(b.x, b.y, 3, 0, Math.PI * 2); ctx.fill(); });
-        // Ship
         ctx.save(); ctx.translate(this.shipX, this.shipY); ctx.rotate(this.shipAngle);
         ctx.strokeStyle = '#00f0ff'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(16, 0); ctx.lineTo(-12, -10); ctx.lineTo(-6, 0); ctx.lineTo(-12, 10); ctx.closePath(); ctx.stroke();
@@ -424,22 +638,19 @@ new_script = """  <script>
       render() {
         const w = canvas.width, h = canvas.height;
         ctx.fillStyle = '#100818'; ctx.fillRect(0, 0, w, h);
-        // Oscilloscope wave
         ctx.strokeStyle = '#c040fb'; ctx.lineWidth = 2; ctx.beginPath();
         for (let x = 0; x < w; x += 4) {
           const y = 80 + Math.sin(x * 0.05 + this.step) * 25 + Math.sin(x * 0.12) * 10;
           if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
         ctx.stroke();
-        // Matrix
         const startY = 150, stepW = 32, trackH = 45;
         this.tracks.forEach((t, ti) => {
           ctx.fillStyle = '#a855f7'; ctx.font = 'bold 12px "Fira Code", monospace';
           ctx.fillText(t, 20, startY + ti * trackH + 25);
           for (let s = 0; s < 16; s++) {
             const sx = 100 + s * stepW, sy = startY + ti * trackH;
-            const on = this.matrix[ti][s];
-            const isCur = (s === this.step);
+            const on = this.matrix[ti][s], isCur = (s === this.step);
             ctx.fillStyle = isCur ? '#ffffff' : on ? '#9333ea' : '#271838';
             ctx.fillRect(sx, sy, stepW - 4, trackH - 8);
           }
@@ -546,7 +757,6 @@ new_script = """  <script>
         ctx.fillText(timeStr, w / 2, 170);
         ctx.fillStyle = '#94a3b8'; ctx.font = '18px "Fira Code", monospace';
         ctx.fillText("GORZÓW WLKP. // POGODA: 21°C SŁONECZNIE", w / 2, 230);
-        // MZK Board
         ctx.fillStyle = '#1e293b'; ctx.fillRect(60, 270, w - 120, 160);
         ctx.fillStyle = '#ffaa00'; ctx.font = 'bold 14px "Fira Code", monospace'; ctx.textAlign = 'left';
         ctx.fillText("LINIA   KIERUNEK               ODJAZD", 80, 305);
@@ -584,11 +794,9 @@ new_script = """  <script>
         ctx.textAlign = 'left';
       }
 
-      // CRT Scanlines
       ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
       for (let y = 0; y < h; y += 4) ctx.fillRect(0, y, w, 1);
 
-      // Radar sweep animation overlay for radar apps
       if (['mod_air_radar', 'mod_marine', 'mod_radar', 'mod_blitz', 'mod_sky'].includes(modId)) {
         radarSweep = (radarSweep + 0.03) % (Math.PI * 2);
         ctx.strokeStyle = 'rgba(0, 255, 180, 0.35)'; ctx.lineWidth = 2;
@@ -597,7 +805,6 @@ new_script = """  <script>
         ctx.stroke();
       }
 
-      // Live status bar
       ctx.fillStyle = 'rgba(6, 12, 20, 0.75)'; ctx.fillRect(0, 0, w, 28);
       ctx.fillStyle = '#00f0ff'; ctx.font = 'bold 11px "Fira Code", monospace';
       ctx.fillText(`TRIMUI // ${modId.toUpperCase()}`, 12, 18);
@@ -605,7 +812,6 @@ new_script = """  <script>
       const now = new Date();
       ctx.fillText(`🔋 98% | Wi-Fi 📶 | ${now.toTimeString().split(' ')[0]}`, w - 210, 18);
 
-      // Active button feedback badge
       if (buttonToastTimer > 0) {
         buttonToastTimer--;
         ctx.fillStyle = 'rgba(0, 240, 255, 0.85)';
@@ -625,13 +831,11 @@ new_script = """  <script>
       ctx.fillStyle = '#00f0ff'; ctx.font = 'bold 22px "Rajdhani", sans-serif'; ctx.textAlign = 'center';
       ctx.fillText("BRICKDECK OS // WYBIERZ APLIKACJĘ", w / 2, 50);
 
-      // Carousel Cards
       const cardW = 200, cardH = 260;
       for (let offset = -1; offset <= 1; offset++) {
         const idx = (launcherCursor + offset + allModules.length) % allModules.length;
         const mod = allModules[idx];
-        const cx = w / 2 + offset * 220;
-        const cy = h / 2 + 10;
+        const cx = w / 2 + offset * 220, cy = h / 2 + 10;
         const isCur = (offset === 0);
 
         ctx.fillStyle = isCur ? '#142032' : '#0c1420';
@@ -639,7 +843,6 @@ new_script = """  <script>
         ctx.strokeStyle = isCur ? '#00f0ff' : '#223248'; ctx.lineWidth = isCur ? 3 : 1;
         ctx.strokeRect(cx - cardW / 2, cy - cardH / 2, cardW, cardH);
 
-        // Preview image
         const img = screenshotCache[mod.id];
         if (img && img.complete) {
           ctx.drawImage(img, cx - cardW / 2 + 10, cy - cardH / 2 + 10, cardW - 20, 120);
@@ -661,9 +864,49 @@ new_script = """  <script>
     // MAIN SIMULATOR LOOP
     // ========================================================
     function mainLoop() {
+      const w = canvas.width, h = canvas.height;
+
       if (isLauncherOpen) {
         renderLauncher();
+      } else if (wasmActive) {
+        // --- WASM MODE RUNNER ---
+        if (!wasmLoaded || wasmLoading) {
+          ctx.fillStyle = '#08101a'; ctx.fillRect(0, 0, w, h);
+          ctx.fillStyle = '#ffaa00'; ctx.font = 'bold 18px "Fira Code", monospace'; ctx.textAlign = 'center';
+          ctx.fillText("🐍 PYODIDE WEBASSEMBLY RUNNER", w / 2, h / 2 - 30);
+          ctx.fillStyle = '#00f0ff'; ctx.font = '14px "Fira Code", monospace';
+          ctx.fillText(wasmStatus || "Inicjalizacja silnika Pythona w przeglądarce...", w / 2, h / 2 + 10);
+          ctx.fillStyle = '#829ab5'; ctx.font = '12px "Fira Code", monospace';
+          ctx.fillText("Pobieranie WebAssembly (tylko raz, potem pamięć cache)", w / 2, h / 2 + 40);
+          ctx.textAlign = 'left';
+        } else {
+          try {
+            const hasMod = pyodideInstance.runPython(`py_mod is not None`);
+            if (hasMod) {
+              const rawBytes = pyodideInstance.runPython(`
+py_mod.update(0.016)
+py_canvas.clear()
+py_mod.render(py_canvas)
+py_canvas.image.tobytes("raw", "RGBA")
+`);
+              const imgData = new ImageData(new Uint8ClampedArray(rawBytes.toJs()), 1024, 768);
+              wasmOffCtx.putImageData(imgData, 0, 0);
+              ctx.drawImage(wasmOffscreenCanvas, 0, 0, w, h);
+
+              // Badge
+              ctx.fillStyle = 'rgba(0, 255, 136, 0.9)'; ctx.fillRect(w - 240, 10, 230, 24);
+              ctx.fillStyle = '#000'; ctx.font = 'bold 11px "Fira Code", monospace';
+              ctx.fillText("🐍 PYTHON WASM // LIVE .PY", w - 230, 26);
+            } else {
+              renderUniversalApp(currentDemo);
+            }
+          } catch (e) {
+            console.error("Pyodide execution error:", e);
+            renderUniversalApp(currentDemo);
+          }
+        }
       } else {
+        // --- FAST JS MODE (DEFAULT) ---
         if (currentDemo === 'mod_raycaster') { rayDemo.update(); rayDemo.render(); }
         else if (currentDemo === 'mod_sandbox') { sandDemo.update(); sandDemo.render(); }
         else if (currentDemo === 'mod_tamagotchi') { tamaDemo.update(); tamaDemo.render(); }
@@ -684,37 +927,60 @@ new_script = """  <script>
     requestAnimationFrame(mainLoop);
 
     // Switch demo via Dropdown
-    demoSelect.addEventListener('change', (e) => {
+    demoSelect.addEventListener('change', async (e) => {
       currentDemo = e.target.value;
       currentModuleIdx = allModules.findIndex(m => m.id === currentDemo);
       isLauncherOpen = false;
+      if (wasmActive && wasmLoaded) {
+        await loadRawPythonModule(currentDemo);
+      }
     });
 
     // Public helper to launch any app from store buttons
-    window.launchInSimulator = function(modId) {
+    window.launchInSimulator = async function(modId) {
       currentDemo = modId;
       demoSelect.value = modId;
       currentModuleIdx = allModules.findIndex(m => m.id === modId);
       isLauncherOpen = false;
+      if (wasmActive && wasmLoaded) {
+        await loadRawPythonModule(currentDemo);
+      }
       document.getElementById('demo').scrollIntoView({ behavior: 'smooth' });
     };
 
     // Cycle modules with L1 / R1
-    function switchModule(delta) {
+    async function switchModule(delta) {
       currentModuleIdx = (currentModuleIdx + delta + allModules.length) % allModules.length;
       currentDemo = allModules[currentModuleIdx].id;
       demoSelect.value = currentDemo;
       triggerButtonToast(delta > 0 ? "R1 // DALEJ" : "L1 // WRÓĆ");
+      if (wasmActive && wasmLoaded) {
+        await loadRawPythonModule(currentDemo);
+      }
+    }
+
+    // Pass input to Python WASM if active
+    function sendInputToWasm(keyName) {
+      if (wasmActive && wasmLoaded && pyodideInstance) {
+        try {
+          pyodideInstance.runPython(`
+if py_mod and hasattr(py_mod, 'handle_input'):
+    py_mod.handle_input("${keyName}")
+`);
+        } catch (e) {}
+      }
     }
 
     // Touch & Button bindings
-    function bindBtn(id, key, toastName) {
+    function bindBtn(id, key, toastName, pyKey) {
       const el = document.getElementById(id);
       if (!el) return;
       const press = () => {
         inputState[key] = true;
         el.classList.add('pressed');
         if (toastName) triggerButtonToast(toastName);
+        if (pyKey) sendInputToWasm(pyKey);
+
         if (key === 'l1') switchModule(-1);
         if (key === 'r1') switchModule(1);
         if (key === 'menu') isLauncherOpen = !isLauncherOpen;
@@ -726,6 +992,7 @@ new_script = """  <script>
             demoSelect.value = currentDemo;
             currentModuleIdx = launcherCursor;
             isLauncherOpen = false;
+            if (wasmActive && wasmLoaded) loadRawPythonModule(currentDemo);
           }
         }
       };
@@ -736,44 +1003,48 @@ new_script = """  <script>
       el.addEventListener('touchend', (e) => { e.preventDefault(); release(); });
     }
 
-    bindBtn('btnUp', 'up', '▲ GÓRA');
-    bindBtn('btnDown', 'down', '▼ DÓŁ');
-    bindBtn('btnLeft', 'left', '◀ LEWO');
-    bindBtn('btnRight', 'right', '▶ PRAWO');
-    bindBtn('btnA', 'a', 'A // AKCJA');
-    bindBtn('btnB', 'b', 'B // COFNIJ');
-    bindBtn('btnX', 'x', 'X // TRYB');
-    bindBtn('btnY', 'y', 'Y // INFO');
-    bindBtn('btnL1', 'l1', 'L1');
-    bindBtn('btnR1', 'r1', 'R1');
-    bindBtn('btnMenu', 'menu', 'MENU');
-    bindBtn('btnSelect', 'select', 'SELECT');
+    bindBtn('btnUp', 'up', '▲ GÓRA', 'KEY_UP');
+    bindBtn('btnDown', 'down', '▼ DÓŁ', 'KEY_DOWN');
+    bindBtn('btnLeft', 'left', '◀ LEWO', 'KEY_LEFT');
+    bindBtn('btnRight', 'right', '▶ PRAWO', 'KEY_RIGHT');
+    bindBtn('btnA', 'a', 'A // AKCJA', 'KEY_A');
+    bindBtn('btnB', 'b', 'B // COFNIJ', 'KEY_B');
+    bindBtn('btnX', 'x', 'X // TRYB', 'KEY_X');
+    bindBtn('btnY', 'y', 'Y // INFO', 'KEY_Y');
+    bindBtn('btnL1', 'l1', 'L1', 'KEY_L1');
+    bindBtn('btnR1', 'r1', 'R1', 'KEY_R1');
+    bindBtn('btnMenu', 'menu', 'MENU', 'KEY_MENU');
+    bindBtn('btnSelect', 'select', 'SELECT', 'KEY_SELECT');
 
     // PC Keyboard Listener
     window.addEventListener('keydown', (e) => {
-      if (['ArrowUp', 'KeyW'].includes(e.code)) { inputState.up = true; triggerButtonToast('▲'); }
-      if (['ArrowDown', 'KeyS'].includes(e.code)) { inputState.down = true; triggerButtonToast('▼'); }
+      if (['ArrowUp', 'KeyW'].includes(e.code)) { inputState.up = true; triggerButtonToast('▲'); sendInputToWasm('KEY_UP'); }
+      if (['ArrowDown', 'KeyS'].includes(e.code)) { inputState.down = true; triggerButtonToast('▼'); sendInputToWasm('KEY_DOWN'); }
       if (['ArrowLeft', 'KeyA'].includes(e.code)) {
         inputState.left = true;
+        sendInputToWasm('KEY_LEFT');
         if (isLauncherOpen) launcherCursor = (launcherCursor - 1 + allModules.length) % allModules.length;
       }
       if (['ArrowRight', 'KeyD'].includes(e.code)) {
         inputState.right = true;
+        sendInputToWasm('KEY_RIGHT');
         if (isLauncherOpen) launcherCursor = (launcherCursor + 1) % allModules.length;
       }
       if (['KeyJ', 'Space'].includes(e.code)) {
         inputState.a = true;
         triggerButtonToast('A');
+        sendInputToWasm('KEY_A');
         if (isLauncherOpen) {
           currentDemo = allModules[launcherCursor].id;
           demoSelect.value = currentDemo;
           currentModuleIdx = launcherCursor;
           isLauncherOpen = false;
+          if (wasmActive && wasmLoaded) loadRawPythonModule(currentDemo);
         }
       }
-      if (['KeyK'].includes(e.code)) { inputState.b = true; triggerButtonToast('B'); }
-      if (['KeyU'].includes(e.code)) { inputState.x = true; triggerButtonToast('X'); }
-      if (['KeyI'].includes(e.code)) { inputState.y = true; triggerButtonToast('Y'); }
+      if (['KeyK'].includes(e.code)) { inputState.b = true; triggerButtonToast('B'); sendInputToWasm('KEY_B'); }
+      if (['KeyU'].includes(e.code)) { inputState.x = true; triggerButtonToast('X'); sendInputToWasm('KEY_X'); }
+      if (['KeyI'].includes(e.code)) { inputState.y = true; triggerButtonToast('Y'); sendInputToWasm('KEY_Y'); }
       if (['KeyQ'].includes(e.code)) { switchModule(-1); }
       if (['KeyE'].includes(e.code)) { switchModule(1); }
       if (['KeyM', 'Escape'].includes(e.code)) { isLauncherOpen = !isLauncherOpen; }
@@ -871,4 +1142,4 @@ final_html = html_prefix + new_script
 with open(INDEX_PATH, "w", encoding="utf-8") as f:
     f.write(final_html)
 
-print("[+] Successfully updated index.html with universal 39-app TrimUI Brick simulator!")
+print("[+] Successfully updated index.html with optional Python WASM (Pyodide) runner!")

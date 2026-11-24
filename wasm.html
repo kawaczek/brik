@@ -469,8 +469,10 @@
 
         <div class="trimui-chassis">
           <div class="bumper-bar">
+            <button class="bumper" id="btnL2">L2 // MAP</button>
             <button class="bumper" id="btnL1">L1 // PREV</button>
             <button class="bumper" id="btnR1">R1 // NEXT</button>
+            <button class="bumper" id="btnR2">R2 // MAP</button>
           </div>
 
           <div class="screen-bezel">
@@ -509,7 +511,7 @@
         </div>
 
         <p style="font-family:var(--font-mono); font-size:12px; color:var(--text-muted); margin-top:14px;">
-          Klawisze PC: Strzałki / WASD • Spacja / J (A) • K (B) • U (X) • I (Y) • Q/E (L1/R1)
+          Klawisze PC: Strzałki / WASD • Spacja / J (A) • K (B) • U (X) • I (Y) • Q/E (L1/R1 Cel) • Z/C (L2/R2 Mapa) • Tab (Select)
         </p>
       </div>
 
@@ -1193,6 +1195,8 @@ if py_mod and hasattr(py_mod, 'handle_input'):
     bindBtn('btnY', 'KEY_Y');
     bindBtn('btnL1', 'KEY_L1');
     bindBtn('btnR1', 'KEY_R1');
+    bindBtn('btnL2', 'KEY_L2');
+    bindBtn('btnR2', 'KEY_R2');
     bindBtn('btnSelect', 'KEY_SELECT');
     bindBtn('btnMenu', 'KEY_MENU');
     bindBtn('btnStart', 'KEY_START');
@@ -1207,7 +1211,10 @@ if py_mod and hasattr(py_mod, 'handle_input'):
       'KeyU': 'KEY_X',
       'KeyI': 'KEY_Y',
       'KeyQ': 'KEY_L1', 'Minus': 'KEY_L1',
-      'KeyE': 'KEY_R1', 'Equal': 'KEY_R1'
+      'KeyE': 'KEY_R1', 'Equal': 'KEY_R1',
+      'KeyZ': 'KEY_L2', 'Digit1': 'KEY_L2',
+      'KeyC': 'KEY_R2', 'Digit2': 'KEY_R2',
+      'Tab': 'KEY_SELECT', 'ShiftRight': 'KEY_SELECT'
     };
 
     window.addEventListener('keydown', (e) => {

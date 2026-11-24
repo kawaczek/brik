@@ -1,10 +1,15 @@
 """
 BrickDeck Module: Global Aerospace, Satellite & Tactical Air Radar
-Unified Air & Space tracking: 3D Earth Globe with ISS and satellites, seamless multi-level zoom,
-dynamic ADS-B live air traffic, interactive aircraft inspection with livery profiles,
-city search (OSM Nominatim), and GPS coordinate targeting.
+Unified Air & Space tracking for TrimUI Brick:
+- Real Satellite Imagery (Google Earth / ESRI World Imagery) & Tactical OSM Map (OpenStreetMap)
+- 3D Tactical Earth Globe with ISS and orbital satellites
+- Physical Gamepad Target Lock-on: L1/R1 & D-Pad target cycling, [A] to open aircraft photo & telemetry
+- Authentic airliner liveries (LOT, Lufthansa, Ryanair, Wizz Air, Emirates, Air France, etc.)
+- Multi-level smooth zoom & OSM geocoding search
 """
 
+import os
+import io
 import math
 import time
 import ssl
@@ -13,6 +18,7 @@ import urllib.request
 import urllib.parse
 import threading
 from typing import List, Dict, Tuple, Optional
+from PIL import Image, ImageDraw
 
 from core.module_base import BaseModule
 from core.theme import (
@@ -26,6 +32,9 @@ from core.canvas import get_font
 WHERETHEISS_URL = "https://api.wheretheiss.at/v1/satellites/25544"
 OPENSKY_BASE_URL = "https://opensky-network.org/api/states/all"
 NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org/search"
+
+# Cache Directory for Map Tiles
+MAP_CACHE_DIR = "/tmp/brick_maps_cache"
 
 # Preset Global Locations
 PRESET_CITIES = [
@@ -45,7 +54,7 @@ PRESET_CITIES = [
     ("Przylądek Canaveral (NASA)", 28.3922, -80.6077, "USA (KSC)")
 ]
 
-# Strategic Global Hubs / Waypoints for 3D Globe Projection
+# Strategic Global Hubs for 3D Globe Projection
 GLOBAL_WAYPOINTS = [
     ("Warszawa", 52.23, 21.01, "EPWA"),
     ("Berlin", 52.52, 13.40, "EDDB"),
@@ -96,28 +105,123 @@ CONTINENTS_GEO = [
     [(130, 32), (133, 34), (139, 35), (141, 38), (141, 43), (145, 44), (141, 45), (138, 37), (131, 33), (130, 32)],
     # Northern Asia & Siberia
     [(40, 65), (60, 70), (80, 72), (110, 75), (140, 72), (170, 66), (180, 65), (160, 55), (142, 53), (110, 50), (80, 50), (50, 55), (40, 65)],
-    # North America - Alaska & Canada
+    # North America
     [(-168, 66), (-155, 71), (-140, 70), (-120, 70), (-95, 70), (-80, 60), (-65, 60), (-60, 46),
      (-70, 42), (-75, 36), (-80, 30), (-81, 25), (-83, 30), (-90, 30), (-95, 29), (-97, 26)],
-    # Central America & Mexico
     [(-97, 26), (-90, 20), (-87, 16), (-83, 9), (-85, 10), (-90, 14), (-100, 17), (-105, 22), (-110, 23)],
-    # US West Coast
     [(-110, 23), (-117, 32), (-124, 38), (-124, 48), (-130, 54), (-135, 60), (-150, 59), (-165, 55), (-168, 66)],
-    # Greenland
     [(-50, 60), (-40, 60), (-20, 70), (-20, 80), (-40, 83), (-60, 80), (-55, 70), (-50, 60)],
     # South America
     [(-75, 10), (-62, 10), (-50, 0), (-35, -5), (-35, -10), (-40, -22), (-50, -30), (-58, -38),
      (-65, -50), (-68, -55), (-75, -50), (-72, -35), (-75, -20), (-80, -5), (-78, 2), (-75, 10)],
-    # Australia
+    # Australia & New Zealand
     [(115, -22), (124, -15), (130, -12), (136, -12), (142, -10), (145, -15), (153, -28), (150, -37),
      (140, -38), (135, -34), (120, -34), (115, -30), (115, -22)],
-    # New Zealand
     [(173, -35), (178, -38), (175, -42), (170, -45), (167, -46), (170, -43), (173, -35)]
 ]
 
 
+class MapTileManager:
+    """Fetches, caches, and stitches satellite (ESRI / Google Earth) & OSM map tiles."""
+    def __init__(self, cache_dir: str = MAP_CACHE_DIR):
+        self.cache_dir = cache_dir
+        os.makedirs(cache_dir, exist_ok=True)
+        self.ctx = ssl.create_default_context()
+        self.ctx.check_hostname = False
+        self.ctx.verify_mode = ssl.CERT_NONE
+        self.mem_cache: Dict[Tuple, Image.Image] = {}
+
+    def get_tile(self, mode: str, z: int, x: int, y: int) -> Optional[Image.Image]:
+        key = (mode, z, x, y)
+        if key in self.mem_cache:
+            return self.mem_cache[key]
+
+        ext = "jpg" if mode == "SATELLITE" else "png"
+        filepath = os.path.join(self.cache_dir, f"{mode.lower()}_{z}_{x}_{y}.{ext}")
+
+        if os.path.exists(filepath):
+            try:
+                img = Image.open(filepath).convert("RGBA")
+                self.mem_cache[key] = img
+                return img
+            except Exception:
+                pass
+
+        if mode == "SATELLITE":
+            url = f"https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}.jpg"
+        else:
+            url = f"https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
+
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "BrickDeck/2.0"})
+            with urllib.request.urlopen(req, context=self.ctx, timeout=3.0) as resp:
+                data = resp.read()
+                with open(filepath, "wb") as f:
+                    f.write(data)
+                img = Image.open(io.BytesIO(data)).convert("RGBA")
+                self.mem_cache[key] = img
+                return img
+        except Exception:
+            return None
+
+    def build_radar_map(self, mode: str, lat: float, lon: float, zoom_lvl: float, radius: int) -> Optional[Image.Image]:
+        """Generate circular radar scope map centered at (lat, lon)."""
+        if zoom_lvl < 2.5:
+            z = 5
+        elif zoom_lvl < 7.0:
+            z = 6
+        elif zoom_lvl < 18.0:
+            z = 7
+        else:
+            z = 8
+
+        lat_rad = math.radians(lat)
+        n = 2.0 ** z
+        cx_tile = (lon + 180.0) / 360.0 * n
+        cy_tile = (1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * n
+
+        center_tx = int(cx_tile)
+        center_ty = int(cy_tile)
+
+        fx = int((cx_tile - center_tx) * 256)
+        fy = int((cy_tile - center_ty) * 256)
+
+        mosaic = Image.new("RGBA", (768, 768), (10, 16, 26, 255))
+        has_any_tile = False
+        for dx in [-1, 0, 1]:
+            for dy in [-1, 0, 1]:
+                tx = center_tx + dx
+                ty = center_ty + dy
+                t_img = self.get_tile(mode, z, tx, ty)
+                if t_img:
+                    mosaic.paste(t_img, ((dx + 1) * 256, (dy + 1) * 256))
+                    has_any_tile = True
+
+        if not has_any_tile:
+            return None
+
+        diam = radius * 2
+        mc_x = 256 + fx
+        mc_y = 256 + fy
+        crop_box = (mc_x - radius, mc_y - radius, mc_x + radius, mc_y + radius)
+
+        if crop_box[0] >= 0 and crop_box[1] >= 0 and crop_box[2] <= 768 and crop_box[3] <= 768:
+            cropped = mosaic.crop(crop_box)
+        else:
+            cropped = mosaic.resize((diam, diam))
+
+        # Circular mask for radar display
+        mask = Image.new("L", (diam, diam), 0)
+        m_draw = ImageDraw.Draw(mask)
+        m_draw.ellipse([(0, 0), (diam, diam)], fill=240)
+
+        result = Image.new("RGBA", (diam, diam), (0, 0, 0, 0))
+        result.paste(cropped, (0, 0), mask)
+        return result
+
+
 class AirRadarModule(BaseModule):
-    name = "Global Aerospace & Satellite Radar"
+    name = "Global Aerospace & Tactical Radar"
     short_name = "AeroSpace"
     icon = "★"
     accent_color = COLOR_ELECTRIC_BLUE
@@ -135,7 +239,19 @@ class AirRadarModule(BaseModule):
         self.target_cam_lat = 52.7333
         self.target_cam_lon = 15.2333
 
-        # Multi-level Smooth Zoom: 1.0 (Orbit Globe) -> 45.0 (Tactical Airspace Radar)
+        # Map Modes: Real Satellite Imagery (Google Earth) / OSM Dark / Cyber 3D Globe
+        self.map_modes = ["SATELLITE", "OSM", "CYBER"]
+        self.map_mode_idx = 0
+        self.map_mode_names = [
+            "🛰️ SATELITA (Google Earth)",
+            "🗺️ MAPA OSM (Tactical Dark)",
+            "🌐 GLOBUS 3D (Cyber Vector)"
+        ]
+        self.tile_manager = MapTileManager()
+        self.current_radar_map: Optional[Image.Image] = None
+        self.last_map_key = None
+
+        # Multi-level Smooth Zoom
         self.zoom = 1.0
         self.target_zoom = 1.0
         self.zoom_levels = [1.0, 2.2, 5.0, 12.0, 25.0, 45.0]
@@ -163,26 +279,22 @@ class AirRadarModule(BaseModule):
         self.iss_orbit_track: List[Tuple[float, float]] = []
         self._generate_iss_orbit_track()
 
-        # Air Traffic (ADS-B Flights)
+        # Air Traffic (ADS-B Commercial & Cargo Flights)
         self.flights: List[Dict] = []
         self._init_synthetic_flights()
-        self.selected_flight_idx = 0
+
+        # Console Gamepad Target Lock-on Index (TrimUI Brick)
+        self.target_flight_idx = 0
         self.selected_flight: Optional[Dict] = self.flights[0] if self.flights else None
         self.hovered_flight: Optional[Dict] = None
-
-        # Interactive Pointer / Mouse State
-        self.mouse_x = -1
-        self.mouse_y = -1
-        self.last_hover_change = 0.0
 
         # Modals State
         self.flight_modal_open = False
         self.modal_open = False  # Location picker modal
         self.city_picker_idx = 0
 
-        # Threading & Status
+        # Background Worker & Sweep
         self.thread_running = False
-        self.last_fetch_time = 0.0
         self.status_msg = "Inicjalizacja radaru..."
         self.sweep_angle = 0.0
 
@@ -190,13 +302,14 @@ class AirRadarModule(BaseModule):
         self._init_synthetic_flights()
         self.thread_running = True
         threading.Thread(target=self._background_worker, daemon=True).start()
+        threading.Thread(target=self._tile_loader_worker, daemon=True).start()
 
     def get_hotkey_hints(self):
         if self.flight_modal_open:
             return [
-                ("D-Pad L/P", "Poprzedni / Następny samolot"),
-                ("A", "Namierz ten lot"),
-                ("B / Klik", "Zamknij kartę lotu")
+                ("L1 / R1 lub D-Pad", "Zmień samolot"),
+                ("A", "Śledź ten lot"),
+                ("B", "Zamknij kartę")
             ]
         elif self.modal_open:
             return [
@@ -205,13 +318,14 @@ class AirRadarModule(BaseModule):
                 ("B", "Anuluj")
             ]
         else:
-            zoom_name = self.zoom_names[self.zoom_idx]
+            mode_name = self.map_mode_names[self.map_mode_idx].split()[0]
+            cur_cs = self.selected_flight["callsign"] if self.selected_flight else "Brak"
             return [
-                ("Kursor / Klik", "Otwórz kartę samolotu"),
-                ("D-Pad", "Obróć globus / Przełącz cel"),
-                ("X / Y / Kółko", f"Zoom: {zoom_name}"),
-                ("A", "Szczegóły lotu"),
-                ("B", "Zmień bazę (GPS)")
+                ("L1/R1 / D-Pad", f"Cel: {cur_cs}"),
+                ("A", "Zdjęcie i dane lotu"),
+                ("X / Y", f"Zoom: {self.zoom_names[self.zoom_idx]}"),
+                ("L2/R2 / Sel", f"Mapa: {mode_name}"),
+                ("B", "Baza GPS")
             ]
 
     def _generate_iss_orbit_track(self):
@@ -228,7 +342,7 @@ class AirRadarModule(BaseModule):
         self.iss_orbit_track = track
 
     def _init_synthetic_flights(self):
-        """Realistic commercial airline traffic with complete livery and flight plan data."""
+        """Authentic commercial fleet around active observer station."""
         p_lat, p_lon = self.obs_lat, self.obs_lon
         self.flights = [
             {
@@ -305,6 +419,19 @@ class AirRadarModule(BaseModule):
         self.selected_flight = self.flights[0]
         self.status_msg = f"LIVE RADAR: {len(self.flights)} maszyn w zasięgu"
 
+    def _tile_loader_worker(self):
+        """Asynchronously preloads satellite / OSM map tiles for observer location."""
+        while self.thread_running:
+            mode = self.map_modes[self.map_mode_idx]
+            if mode != "CYBER":
+                cur_key = (mode, round(self.obs_lat, 2), round(self.obs_lon, 2), self.zoom_idx)
+                if cur_key != self.last_map_key:
+                    map_img = self.tile_manager.build_radar_map(mode, self.obs_lat, self.obs_lon, self.zoom, 210)
+                    if map_img:
+                        self.current_radar_map = map_img
+                        self.last_map_key = cur_key
+            time.sleep(2.0)
+
     def _fetch_live_data(self):
         """Fetch live ISS position from wheretheiss.at and ADS-B flights from OpenSky."""
         ssl_ctx = ssl.create_default_context()
@@ -313,7 +440,7 @@ class AirRadarModule(BaseModule):
 
         # 1. Fetch ISS
         try:
-            req = urllib.request.Request(WHERETHEISS_URL, headers={"User-Agent": "BrickDeck/1.0"})
+            req = urllib.request.Request(WHERETHEISS_URL, headers={"User-Agent": "BrickDeck/2.0"})
             with urllib.request.urlopen(req, context=ssl_ctx, timeout=3.5) as resp:
                 data = json.loads(resp.read().decode())
                 if "latitude" in data and "longitude" in data:
@@ -335,7 +462,7 @@ class AirRadarModule(BaseModule):
             lamax = self.obs_lat + 1.2
             lomax = self.obs_lon + 1.8
             url = f"{OPENSKY_BASE_URL}?lamin={lamin:.3f}&lomin={lomin:.3f}&lamax={lamax:.3f}&lomax={lomax:.3f}"
-            req = urllib.request.Request(url, headers={"User-Agent": "BrickDeck-ADS-B/1.0"})
+            req = urllib.request.Request(url, headers={"User-Agent": "BrickDeck-ADS-B/2.0"})
             with urllib.request.urlopen(req, context=ssl_ctx, timeout=4.0) as resp:
                 data = json.loads(resp.read().decode())
                 states = data.get("states", [])
@@ -344,7 +471,7 @@ class AirRadarModule(BaseModule):
                     for s in states:
                         if s[6] is None or s[5] is None: continue
                         cs = (s[1] or s[0] or "UNKNOWN").strip().upper()
-                        airline_name = "Linie Komercyjne"
+                        airline_name = "Komercyjne Linie Lotnicze"
                         model_name = "Boeing 737-800"
                         orig = "WAW (Warszawa)"
                         dest = "FRA (Frankfurt)"
@@ -391,8 +518,7 @@ class AirRadarModule(BaseModule):
                         })
                     if parsed:
                         self.flights = parsed
-                        self.status_msg = f"LIVE ADS-B: {len(parsed)} samolotów online"
-                        self.last_fetch_time = time.time()
+                        self.status_msg = f"LIVE ADS-B: {len(parsed)} maszyn online"
         except Exception:
             if not self.flights:
                 self._init_synthetic_flights()
@@ -405,7 +531,7 @@ class AirRadarModule(BaseModule):
     def update(self, dt: float):
         self.sweep_angle = (self.sweep_angle + dt * 65.0) % 360.0
 
-        # Smooth camera orientation interpolation (Cinematic glide)
+        # Smooth camera orientation interpolation
         lat_diff = self.target_cam_lat - self.cam_lat
         lon_diff = self.target_cam_lon - self.cam_lon
         self.cam_lat += lat_diff * min(1.0, dt * 6.0)
@@ -426,7 +552,6 @@ class AirRadarModule(BaseModule):
             dist_deg = (fl.get("speed_kmh", 800) / 3600.0 * dt) / 111.0
             fl["lat"] += math.cos(t_rad) * dist_deg
             fl["lon"] += math.sin(t_rad) * dist_deg / max(0.2, math.cos(math.radians(fl["lat"])))
-            # Keep within airspace boundaries around active base
             if abs(fl["lat"] - self.obs_lat) > 1.9 or abs(fl["lon"] - self.obs_lon) > 2.4:
                 fl["track"] = (fl["track"] + 180.0) % 360.0
 
@@ -451,26 +576,20 @@ class AirRadarModule(BaseModule):
         return px, py, is_visible
 
     def handle_pointer(self, cx: int, cy: int, is_down: bool):
-        """Handle mouse hover and clicks directly on aircraft or UI buttons."""
-        self.mouse_x = cx
-        self.mouse_y = cy
-
-        # If modal is open, check if clicked on [X] or outside modal to close
+        """Secondary pointer support for browser simulation."""
         if self.flight_modal_open:
             if is_down:
                 mx, my, mw, mh = 160, 60, 704, 648
                 close_x0, close_y0 = mx + mw - 54, my + 14
                 close_x1, close_y1 = mx + mw - 18, my + 46
-                # Clicked close button or clicked outside modal card
                 if (close_x0 <= cx <= close_x1 and close_y0 <= cy <= close_y1) or not (mx <= cx <= mx + mw and my <= cy <= my + mh):
                     self.flight_modal_open = False
             return
 
-        # Check if cursor is over any aircraft (radar or globe)
         best_flight = None
-        best_dist = 24.0  # Hit radius in pixels
+        best_dist = 26.0
 
-        for fl in self.flights:
+        for idx, fl in enumerate(self.flights):
             sx = fl.get("_screen_x")
             sy = fl.get("_screen_y")
             if sx is not None and sy is not None:
@@ -478,30 +597,31 @@ class AirRadarModule(BaseModule):
                 if d < best_dist:
                     best_dist = d
                     best_flight = fl
+                    self.target_flight_idx = idx
 
         self.hovered_flight = best_flight
-
-        # If clicked on aircraft or hovered directly over it
         if best_flight:
             self.selected_flight = best_flight
             if is_down:
                 self.flight_modal_open = True
 
     def handle_input(self, event: str) -> bool:
-        # 1. Flight Modal Navigation
+        """Physical Button Controls for TrimUI Brick console."""
+        # 1. Modal Navigation (Flight Card Opened)
         if self.flight_modal_open:
             if event in ("BTN_B", "KEY_B", "ESCAPE", "MENU"):
                 self.flight_modal_open = False
                 return True
-            elif event in ("LEFT", "KEY_LEFT", "UP", "KEY_UP"):
+            # Switch between aircraft photos while viewing card
+            elif event in ("LEFT", "KEY_LEFT", "L1", "KEY_L1", "BTN_L1"):
                 if self.flights:
-                    idx = self.flights.index(self.selected_flight) if self.selected_flight in self.flights else 0
-                    self.selected_flight = self.flights[(idx - 1) % len(self.flights)]
+                    self.target_flight_idx = (self.target_flight_idx - 1) % len(self.flights)
+                    self.selected_flight = self.flights[self.target_flight_idx]
                     return True
-            elif event in ("RIGHT", "KEY_RIGHT", "DOWN", "KEY_DOWN"):
+            elif event in ("RIGHT", "KEY_RIGHT", "R1", "KEY_R1", "BTN_R1"):
                 if self.flights:
-                    idx = self.flights.index(self.selected_flight) if self.selected_flight in self.flights else 0
-                    self.selected_flight = self.flights[(idx + 1) % len(self.flights)]
+                    self.target_flight_idx = (self.target_flight_idx + 1) % len(self.flights)
+                    self.selected_flight = self.flights[self.target_flight_idx]
                     return True
             elif event in ("BTN_A", "KEY_A", "ENTER", "SPACE"):
                 if self.selected_flight:
@@ -527,8 +647,9 @@ class AirRadarModule(BaseModule):
                 self.obs_lon = lon
                 self.target_cam_lat = lat
                 self.target_cam_lon = lon
-                self.zoom_idx = 4  # Smoothly zoom into tactical approach
+                self.zoom_idx = 4
                 self.modal_open = False
+                self.last_map_key = None  # Force map reload for new location
                 threading.Thread(target=self._fetch_live_data, daemon=True).start()
                 return True
             elif event in ("BTN_B", "KEY_B", "ESCAPE", "MENU"):
@@ -536,40 +657,67 @@ class AirRadarModule(BaseModule):
                 return True
             return False
 
-        # 3. Main Radar / Globe View Controls
-        if event in ("BTN_B", "KEY_B"):
+        # 3. Main Console Controls (TrimUI Brick)
+        # Target Cycling via Shoulder Buttons [L1] / [R1]
+        if event in ("R1", "KEY_R1", "BTN_R1"):
+            if self.flights:
+                self.target_flight_idx = (self.target_flight_idx + 1) % len(self.flights)
+                self.selected_flight = self.flights[self.target_flight_idx]
+                return True
+        elif event in ("L1", "KEY_L1", "BTN_L1"):
+            if self.flights:
+                self.target_flight_idx = (self.target_flight_idx - 1) % len(self.flights)
+                self.selected_flight = self.flights[self.target_flight_idx]
+                return True
+
+        # Map Mode Toggle via [L2] / [R2] / [SELECT]
+        elif event in ("L2", "KEY_L2", "BTN_L2", "R2", "KEY_R2", "BTN_R2", "SELECT", "KEY_SELECT", "BTN_SELECT"):
+            self.map_mode_idx = (self.map_mode_idx + 1) % len(self.map_modes)
+            self.last_map_key = None  # Force fresh map stitch
+            return True
+
+        # Open Flight Details Card via [A]
+        elif event in ("BTN_A", "KEY_A", "SPACE", "ENTER"):
+            if self.flights:
+                self.selected_flight = self.flights[self.target_flight_idx]
+                self.flight_modal_open = True
+                return True
+
+        # Open City / GPS Picker via [B]
+        elif event in ("BTN_B", "KEY_B"):
             self.modal_open = True
             return True
+
+        # Zoom In / Out via [X] / [Y]
         elif event in ("BTN_X", "KEY_X", "ZOOM_IN", "WHEEL_UP"):
-            # Zoom In
             if self.zoom_idx < len(self.zoom_levels) - 1:
                 self.zoom_idx += 1
                 return True
         elif event in ("BTN_Y", "KEY_Y", "ZOOM_OUT", "WHEEL_DOWN"):
-            # Zoom Out
             if self.zoom_idx > 0:
                 self.zoom_idx -= 1
                 return True
-        elif event in ("BTN_A", "KEY_A", "SPACE", "ENTER"):
-            # Open flight modal for selected/hovered flight
-            target = self.hovered_flight or self.selected_flight
-            if target:
-                self.selected_flight = target
-                self.flight_modal_open = True
+
+        # D-Pad Controls:
+        # In Tactical Radar mode: D-Pad Left/Right also cycles aircraft targets!
+        elif event in ("LEFT", "KEY_LEFT", "KeyA"):
+            if self.zoom >= 2.5 and self.flights:
+                self.target_flight_idx = (self.target_flight_idx - 1) % len(self.flights)
+                self.selected_flight = self.flights[self.target_flight_idx]
                 return True
             else:
-                # Snap camera back to base
-                self.target_cam_lat = self.obs_lat
-                self.target_cam_lon = self.obs_lon
+                self.target_cam_lon = (self.target_cam_lon - 22.0 / max(0.5, self.zoom))
+                if self.target_cam_lon < -180: self.target_cam_lon += 360
                 return True
-        elif event in ("LEFT", "KEY_LEFT", "KeyA"):
-            self.target_cam_lon = (self.target_cam_lon - 22.0 / max(0.5, self.zoom))
-            if self.target_cam_lon < -180: self.target_cam_lon += 360
-            return True
         elif event in ("RIGHT", "KEY_RIGHT", "KeyD"):
-            self.target_cam_lon = (self.target_cam_lon + 22.0 / max(0.5, self.zoom))
-            if self.target_cam_lon > 180: self.target_cam_lon -= 360
-            return True
+            if self.zoom >= 2.5 and self.flights:
+                self.target_flight_idx = (self.target_flight_idx + 1) % len(self.flights)
+                self.selected_flight = self.flights[self.target_flight_idx]
+                return True
+            else:
+                self.target_cam_lon = (self.target_cam_lon + 22.0 / max(0.5, self.zoom))
+                if self.target_cam_lon > 180: self.target_cam_lon -= 360
+                return True
         elif event in ("UP", "KEY_UP", "KeyW"):
             self.target_cam_lat = min(85.0, self.target_cam_lat + 16.0 / max(0.5, self.zoom))
             return True
@@ -580,8 +728,7 @@ class AirRadarModule(BaseModule):
         return False
 
     def _draw_aircraft_photo(self, draw, px: int, py: int, pw: int, ph: int, fl: Dict):
-        """Procedural side-view illustration/photo of modern airliner in authentic airline livery."""
-        # Sky background with realistic atmospheric altitude gradient
+        """Procedural side-view airliner photo in authentic airline livery."""
         draw.rounded_rectangle([(px, py), (px + pw, py + ph)], radius=10, fill=(12, 18, 28), outline=(35, 75, 120), width=2)
         for y_off in range(ph - 4):
             rat = y_off / float(ph)
@@ -590,12 +737,10 @@ class AirRadarModule(BaseModule):
             b_c = int(38 + rat * 48)
             draw.line([(px + 2, py + 2 + y_off), (px + pw - 2, py + 2 + y_off)], fill=(r_c, g_c, b_c))
 
-        # High-altitude condensation trail (contrail)
         contrail_y = py + ph // 2 + 12
         draw.line([(px + 25, contrail_y), (px + pw // 2 - 20, contrail_y)], fill=(220, 235, 255), width=3)
         draw.line([(px + 50, contrail_y - 2), (px + pw // 2 - 40, contrail_y - 2)], fill=(255, 255, 255), width=2)
 
-        # Livery and color scheme
         airline = fl.get("airline", "")
         callsign = fl.get("callsign", "")
 
@@ -603,32 +748,32 @@ class AirRadarModule(BaseModule):
             body_col = (248, 250, 255)
             belly_col = (18, 35, 80)
             tail_col = (14, 28, 70)
-            accent_col = (225, 185, 30)  # Crane gold
+            accent_col = (225, 185, 30)
         elif "Lufthansa" in airline or "DLH" in callsign:
             body_col = (245, 246, 250)
             belly_col = (15, 25, 50)
             tail_col = (10, 20, 45)
-            accent_col = (255, 180, 0)  # Lufthansa yellow
+            accent_col = (255, 180, 0)
         elif "Ryanair" in airline or "RYR" in callsign:
             body_col = (240, 245, 252)
             belly_col = (10, 24, 85)
             tail_col = (10, 24, 85)
-            accent_col = (250, 200, 20)  # Ryanair harp gold
+            accent_col = (250, 200, 20)
         elif "Wizz" in airline or "WZZ" in callsign:
             body_col = (246, 246, 250)
             belly_col = (160, 20, 100)
-            tail_col = (190, 25, 115)  # Wizz magenta
-            accent_col = (0, 190, 255)  # Cyan W
+            tail_col = (190, 25, 115)
+            accent_col = (0, 190, 255)
         elif "Emirates" in airline or "UAE" in callsign:
             body_col = (252, 252, 255)
             belly_col = (220, 225, 235)
-            tail_col = (195, 20, 25)  # UAE flag red
+            tail_col = (195, 20, 25)
             accent_col = (200, 160, 40)
         elif "Air France" in airline or "AFR" in callsign:
             body_col = (248, 249, 252)
             belly_col = (20, 30, 60)
             tail_col = (15, 28, 70)
-            accent_col = (230, 30, 40)  # Red accent
+            accent_col = (230, 30, 40)
         elif "British Airways" in airline or "BAW" in callsign:
             body_col = (248, 249, 252)
             belly_col = (18, 32, 68)
@@ -647,57 +792,43 @@ class AirRadarModule(BaseModule):
         fx0 = ac_x - fuse_len // 2
         fy0 = ac_y - fuse_h // 2
 
-        # 1. Fuselage tube
         draw.rounded_rectangle([(fx0 + 32, fy0), (fx0 + fuse_len - 32, fy0 + fuse_h)], radius=7, fill=body_col)
-        # Nose radome
         draw.polygon([(fx0 + 34, fy0), (fx0, fy0 + fuse_h // 2), (fx0 + 34, fy0 + fuse_h)], fill=body_col)
         draw.polygon([(fx0 + 8, fy0 + fuse_h // 2 - 4), (fx0, fy0 + fuse_h // 2), (fx0 + 8, fy0 + fuse_h // 2 + 4)], fill=(35, 42, 50))
-        # Cockpit windshield
         draw.polygon([(fx0 + 14, fy0 + 5), (fx0 + 26, fy0 + 3), (fx0 + 28, fy0 + 8), (fx0 + 18, fy0 + 9)], fill=(16, 28, 48))
-        # Lower belly paint
         draw.rectangle([(fx0 + 28, fy0 + fuse_h // 2 + 2), (fx0 + fuse_len - 38, fy0 + fuse_h)], fill=belly_col)
-        # Tail taper
         draw.polygon([(fx0 + fuse_len - 35, fy0), (fx0 + fuse_len, fy0 + 9), (fx0 + fuse_len - 35, fy0 + fuse_h)], fill=body_col)
 
-        # 2. Vertical Stabilizer (Tail)
         draw.polygon([(fx0 + fuse_len - 58, fy0), (fx0 + fuse_len - 16, fy0 - 48), (fx0 + fuse_len, fy0 - 46), (fx0 + fuse_len - 22, fy0)], fill=tail_col)
         draw.ellipse([(fx0 + fuse_len - 24, fy0 - 36), (fx0 + fuse_len - 10, fy0 - 22)], fill=accent_col)
-        # Horizontal Stabilizer
         draw.polygon([(fx0 + fuse_len - 28, fy0 + 7), (fx0 + fuse_len + 16, fy0 + 9), (fx0 + fuse_len - 12, fy0 + 14)],
                      fill=(min(255, tail_col[0] + 30), min(255, tail_col[1] + 30), min(255, tail_col[2] + 30)))
 
-        # 3. Passenger Windows
         win_y = fy0 + 7
         for wx in range(fx0 + 40, fx0 + fuse_len - 48, 6):
             draw.rectangle([(wx, win_y), (wx + 3, win_y + 4)], fill=(15, 25, 40))
 
-        # 4. Main Swept Wing & Blended Winglet
         draw.polygon([(ac_x - 38, ac_y + 6), (ac_x - 10, ac_y + 40), (ac_x + 10, ac_y + 40), (ac_x + 18, ac_y + 6)],
                      fill=(185, 192, 205), outline=(135, 145, 160))
         draw.polygon([(ac_x + 10, ac_y + 40), (ac_x + 14, ac_y + 26), (ac_x + 18, ac_y + 40)], fill=accent_col)
 
-        # 5. High-Bypass Turbofan Jet Engine
         eng_x = ac_x - 20
         eng_y = ac_y + 14
         draw.rounded_rectangle([(eng_x, eng_y), (eng_x + 40, eng_y + 18)], radius=5, fill=(160, 172, 188), outline=(100, 112, 128))
         draw.ellipse([(eng_x - 3, eng_y + 1), (eng_x + 6, eng_y + 17)], fill=(25, 30, 40))
         draw.polygon([(eng_x + 40, eng_y + 3), (eng_x + 46, eng_y + 9), (eng_x + 40, eng_y + 15)], fill=(45, 50, 60))
 
-        # Badge overlays on photo
         draw.rounded_rectangle([(px + 12, py + ph - 34), (px + 270, py + ph - 8)], radius=6, fill=(8, 14, 22, 220), outline=(0, 200, 255))
         draw.text((px + 20, py + ph - 28), f"✈ {fl.get('model', 'BOEING 737-800')[:28]}", fill=(0, 240, 255), font=get_font(11, bold=True))
         draw.text((px + pw - 145, py + 12), f"REG: {fl.get('reg', 'SP-LWA')}", fill=(255, 255, 255), font=get_font(11, bold=True))
 
     def _draw_flight_modal(self, canvas, fl: Dict):
-        """Render high-tech flight telemetry modal with full airliner photo and telemetry stats."""
-        # Dark translucent overlay
+        """Render high-tech flight telemetry modal with airliner photo and telemetry stats."""
         canvas.draw.rectangle([(0, 0), (canvas.width, canvas.height)], fill=(4, 6, 10, 225))
 
         mx, my, mw, mh = 160, 60, 704, 648
-        # Outer Modal Container
         canvas.draw.rounded_rectangle([(mx, my), (mx + mw, my + mh)], radius=16, fill=(16, 22, 32), outline=COLOR_CYBER_CYAN, width=2)
 
-        # Header Bar
         canvas.draw.rounded_rectangle([(mx + 2, my + 2), (mx + mw - 2, my + 60)], radius=14, fill=(24, 34, 50))
         canvas.draw.line([(mx, my + 60), (mx + mw, my + 60)], fill=COLOR_CYBER_CYAN, width=2)
 
@@ -706,15 +837,12 @@ class AirRadarModule(BaseModule):
         canvas.draw.text((mx + 24, my + 35), f"REJS: {fl['callsign']}  |  ICAO24: {fl.get('icao', 'N/A').upper()}  |  TRANS: {fl.get('squawk', '7000')}",
                          fill=COLOR_CYBER_CYAN, font=get_font(11, bold=True))
 
-        # Close button [X]
         canvas.draw.rounded_rectangle([(mx + mw - 54, my + 14), (mx + mw - 18, my + 46)], radius=6, fill=(190, 35, 45), outline=(255, 100, 110))
         canvas.draw.text((mx + mw - 41, my + 19), "✕", fill=(255, 255, 255), font=get_font(14, bold=True))
 
-        # 1. Aircraft Photo Box
         px, py, pw, ph = mx + 20, my + 72, mw - 40, 180
         self._draw_aircraft_photo(canvas.draw, px, py, pw, ph, fl)
 
-        # 2. Flight Route & Progress
         rx, ry, rw = mx + 20, my + 264, mw - 40
         canvas.draw.rounded_rectangle([(rx, ry), (rx + rw, ry + 82)], radius=10, fill=(20, 28, 42), outline=COLOR_BORDER)
 
@@ -725,7 +853,6 @@ class AirRadarModule(BaseModule):
         canvas.draw.text((rx + 16, ry + 12), f"WYLOT:  {orig}", fill=COLOR_TEXT_PRIMARY, font=get_font(12, bold=True))
         canvas.draw.text((rx + rw - 240, ry + 12), f"CEL:  {dest}", fill=COLOR_FLIPPER_AMBER, font=get_font(12, bold=True))
 
-        # Visual progress track
         bar_x = rx + 16
         bar_y = ry + 44
         bar_w = rw - 32
@@ -737,7 +864,6 @@ class AirRadarModule(BaseModule):
         canvas.draw.ellipse([(pl_icon_x - 8, bar_y - 2), (pl_icon_x + 8, bar_y + 14)], fill=(255, 255, 255), outline=COLOR_CYBER_CYAN)
         canvas.draw.text((bar_x + bar_w - 95, ry + 60), f"{int(prog * 100)}% TRASY", fill=COLOR_CYBER_CYAN, font=get_font(10, bold=True))
 
-        # 3. Telemetry Stats Grid
         tx, ty, tw = mx + 20, my + 358, mw - 40
         canvas.draw.rounded_rectangle([(tx, ty), (tx + tw, ty + 215)], radius=10, fill=(18, 25, 38), outline=COLOR_BORDER)
 
@@ -769,16 +895,19 @@ class AirRadarModule(BaseModule):
             col_v = COLOR_PHOSPHOR_GREEN if idx == 3 else COLOR_TEXT_PRIMARY
             canvas.draw.text((tx + tw // 2 + 10, sy + 18), val, fill=col_v, font=get_font(12, bold=True))
 
-        # Bottom Controls Helper
-        canvas.draw.text((mx + 24, my + mh - 30), "[A]: Wycentruj widok  |  [D-Pad L/P]: Inny samolot  |  [B / Kliknij poza]: Zamknij",
-                         fill=COLOR_TEXT_MUTED, font=get_font(11, bold=True))
+        canvas.draw.text((mx + 24, my + mh - 30),
+                         "[L1/R1 lub D-Pad L/P]: Inny samolot  |  [A]: Śledź  |  [B]: Zamknij kartę",
+                         fill=COLOR_FLIPPER_AMBER, font=get_font(12, bold=True))
 
     def render(self, canvas):
         card_w_left = 634
         card_w_right = 316
 
+        cur_mode = self.map_modes[self.map_mode_idx]
+        cur_mode_name = self.map_mode_names[self.map_mode_idx]
+
         # ----------------------------------------------------------------------
-        # Left Panel: 3D Tactical Globe & Aerospace Radar Canvas
+        # Left Panel: Radar & Global Map Viewport
         # ----------------------------------------------------------------------
         canvas.draw_card(
             32, 66, card_w_left, 634,
@@ -791,7 +920,6 @@ class AirRadarModule(BaseModule):
         cy = 385
         globe_r = int(185 * self.zoom)
 
-        # Viewport Bounds
         vx = 48
         vy = 118
         vw = card_w_left - 32
@@ -799,183 +927,187 @@ class AirRadarModule(BaseModule):
         canvas.draw.rectangle([(vx, vy), (vx + vw, vy + vh)], fill=(8, 12, 18), outline=COLOR_BORDER, width=1)
 
         # ----------------------------------------------------------------------
-        # 1. Render 3D Earth Globe (When zoom < 10.0x)
+        # MAP LAYER: SATELLITE (Google Earth) / OSM / CYBER 3D GLOBE
         # ----------------------------------------------------------------------
-        if self.zoom < 10.0:
-            # Multi-layer Outer Atmospheric Halo
-            for i in range(14, 0, -3):
-                gr = globe_r + i
-                glow_col = (10, 60 + i * 8, 120 + i * 9)
-                canvas.draw.ellipse([(cx - gr, cy - gr), (cx + gr, cy + gr)], outline=glow_col, width=2)
+        radar_r = 210
 
-            # Globe Sphere Base: Deep Oceanic Blue
-            canvas.draw.ellipse([(cx - globe_r, cy - globe_r), (cx + globe_r, cy + globe_r)],
-                                fill=(10, 18, 32), outline=(0, 200, 255), width=2)
+        if cur_mode != "CYBER":
+            # Real Satellite Imagery or OSM Underlay Map
+            if self.current_radar_map:
+                map_x = cx - radar_r
+                map_y = cy - radar_r
+                canvas.image.paste(self.current_radar_map, (map_x, map_y), self.current_radar_map)
+            else:
+                # Fallback loading background
+                canvas.draw.ellipse([(cx - radar_r, cy - radar_r), (cx + radar_r, cy + radar_r)],
+                                    fill=(12, 18, 30), outline=(0, 200, 255), width=2)
+                canvas.draw.text((cx - 80, cy - 8), "POBIERANIE KAFELKÓW MAPY...", fill=COLOR_CYBER_CYAN, font=get_font(11, bold=True))
+        else:
+            # Procedural 3D Tactical Earth Globe
+            if self.zoom < 10.0:
+                for i in range(14, 0, -3):
+                    gr = globe_r + i
+                    glow_col = (10, 60 + i * 8, 120 + i * 9)
+                    canvas.draw.ellipse([(cx - gr, cy - gr), (cx + gr, cy + gr)], outline=glow_col, width=2)
 
-            # Limb Darkening / Internal Specular Horizon Ring
-            for i in range(globe_r, max(0, globe_r - 20), -2):
-                canvas.draw.ellipse([(cx - i, cy - i), (cx + i, cy + i)], outline=(16, 32, 54), width=1)
+                canvas.draw.ellipse([(cx - globe_r, cy - globe_r), (cx + globe_r, cy + globe_r)],
+                                    fill=(10, 18, 32), outline=(0, 200, 255), width=2)
 
-            # Meridians & Parallels Graticule (Curved 3D coordinate mesh)
-            # Longitude Meridians (every 30°)
-            for m_lon in range(-180, 180, 30):
-                pts = []
-                for m_lat in range(-80, 81, 10):
-                    px, py, vis = self._project_ortho(m_lat, m_lon, cx, cy, globe_r)
-                    if vis and (vx <= px <= vx + vw and vy <= py <= vy + vh):
-                        pts.append((px, py))
-                    else:
-                        if len(pts) > 1:
-                            canvas.draw.line(pts, fill=(18, 42, 65), width=1)
-                        pts = []
-                if len(pts) > 1:
-                    canvas.draw.line(pts, fill=(18, 42, 65), width=1)
+                for i in range(globe_r, max(0, globe_r - 20), -2):
+                    canvas.draw.ellipse([(cx - i, cy - i), (cx + i, cy + i)], outline=(16, 32, 54), width=1)
 
-            # Latitude Parallels (Equator + Parallels at ±30°, ±60°)
-            for p_lat in [-60, -30, 0, 30, 60]:
-                pts = []
-                for p_lon in range(-180, 181, 10):
-                    px, py, vis = self._project_ortho(p_lat, p_lon, cx, cy, globe_r)
-                    if vis and (vx <= px <= vx + vw and vy <= py <= vy + vh):
-                        pts.append((px, py))
-                    else:
-                        if len(pts) > 1:
-                            col = (0, 160, 210) if p_lat == 0 else (18, 42, 65)
-                            canvas.draw.line(pts, fill=col, width=1)
-                        pts = []
-                if len(pts) > 1:
-                    col = (0, 160, 210) if p_lat == 0 else (18, 42, 65)
-                    canvas.draw.line(pts, fill=col, width=1)
+                # Meridians & Parallels Graticule
+                for m_lon in range(-180, 180, 30):
+                    pts = []
+                    for m_lat in range(-80, 81, 10):
+                        px, py, vis = self._project_ortho(m_lat, m_lon, cx, cy, globe_r)
+                        if vis and (vx <= px <= vx + vw and vy <= py <= vy + vh):
+                            pts.append((px, py))
+                        else:
+                            if len(pts) > 1: canvas.draw.line(pts, fill=(18, 42, 65), width=1)
+                            pts = []
+                    if len(pts) > 1: canvas.draw.line(pts, fill=(18, 42, 65), width=1)
 
-            # Continents Outlines
-            for cont in CONTINENTS_GEO:
-                c_pts = [self._project_ortho(lat, lon, cx, cy, globe_r) for lon, lat in cont]
-                for i in range(len(c_pts) - 1):
-                    p1 = c_pts[i]
-                    p2 = c_pts[i + 1]
-                    if p1[2] and p2[2]:
-                        if (vx <= p1[0] <= vx + vw and vy <= p1[1] <= vy + vh) or (vx <= p2[0] <= vx + vw and vy <= p2[1] <= vy + vh):
-                            canvas.draw.line([(p1[0], p1[1]), (p2[0], p2[1])], fill=(38, 140, 95), width=2)
+                for p_lat in [-60, -30, 0, 30, 60]:
+                    pts = []
+                    for p_lon in range(-180, 181, 10):
+                        px, py, vis = self._project_ortho(p_lat, p_lon, cx, cy, globe_r)
+                        if vis and (vx <= px <= vx + vw and vy <= py <= vy + vh):
+                            pts.append((px, py))
+                        else:
+                            if len(pts) > 1:
+                                col = (0, 160, 210) if p_lat == 0 else (18, 42, 65)
+                                canvas.draw.line(pts, fill=col, width=1)
+                            pts = []
+                    if len(pts) > 1:
+                        col = (0, 160, 210) if p_lat == 0 else (18, 42, 65)
+                        canvas.draw.line(pts, fill=col, width=1)
 
-            # Strategic Global Waypoints / Cities on Globe
-            font_city = get_font(9, bold=True)
-            for c_name, c_lat, c_lon, iata in GLOBAL_WAYPOINTS:
-                wpx, wpy, wvis = self._project_ortho(c_lat, c_lon, cx, cy, globe_r)
-                if wvis and (vx <= wpx <= vx + vw and vy <= wpy <= vy + vh):
-                    canvas.draw.ellipse([(wpx - 2, wpy - 2), (wpx + 2, wpy + 2)], fill=COLOR_CYBER_CYAN, outline=COLOR_TEXT_PRIMARY)
-                    if self.zoom >= 1.5:
-                        canvas.draw.text((wpx + 5, wpy - 5), iata, fill=(140, 200, 255), font=font_city)
+                for cont in CONTINENTS_GEO:
+                    c_pts = [self._project_ortho(lat, lon, cx, cy, globe_r) for lon, lat in cont]
+                    for i in range(len(c_pts) - 1):
+                        p1, p2 = c_pts[i], c_pts[i + 1]
+                        if p1[2] and p2[2]:
+                            if (vx <= p1[0] <= vx + vw and vy <= p1[1] <= vy + vh) or (vx <= p2[0] <= vx + vw and vy <= p2[1] <= vy + vh):
+                                canvas.draw.line([(p1[0], p1[1]), (p2[0], p2[1])], fill=(38, 140, 95), width=2)
 
-            # ISS Orbit Track Ground Projection (Golden Sine Wave)
-            if self.zoom < 5.0 and self.iss_orbit_track:
-                t_pts = [self._project_ortho(lat, lon, cx, cy, globe_r) for lat, lon in self.iss_orbit_track]
-                for i in range(len(t_pts) - 1):
-                    if t_pts[i][2] and t_pts[i + 1][2]:
-                        canvas.draw.line([(t_pts[i][0], t_pts[i][1]), (t_pts[i + 1][0], t_pts[i + 1][1])], fill=(180, 125, 25), width=1)
+                font_city = get_font(9, bold=True)
+                for c_name, c_lat, c_lon, iata in GLOBAL_WAYPOINTS:
+                    wpx, wpy, wvis = self._project_ortho(c_lat, c_lon, cx, cy, globe_r)
+                    if wvis and (vx <= wpx <= vx + vw and vy <= wpy <= vy + vh):
+                        canvas.draw.ellipse([(wpx - 2, wpy - 2), (wpx + 2, wpy + 2)], fill=COLOR_CYBER_CYAN, outline=COLOR_TEXT_PRIMARY)
+                        if self.zoom >= 1.5:
+                            canvas.draw.text((wpx + 5, wpy - 5), iata, fill=(140, 200, 255), font=font_city)
 
-            # Satellites on Globe
-            font_sat = get_font(10, bold=True)
-            for sat in self.satellites:
-                sx, sy, is_vis = self._project_ortho(sat["lat"], sat["lon"], cx, cy, globe_r)
-                if is_vis and (vx - 10 <= sx <= vx + vw + 10 and vy - 10 <= sy <= vy + vh + 10):
-                    s_col = sat["col"]
-                    canvas.draw.ellipse([(sx - 4, sy - 4), (sx + 4, sy + 4)], fill=s_col, outline=COLOR_TEXT_PRIMARY)
-                    if sat["id"] == "ISS":
-                        canvas.draw.line([(sx - 8, sy), (sx + 8, sy)], fill=COLOR_FLIPPER_AMBER, width=2)
-                        canvas.draw.rectangle([(sx - 8, sy - 3), (sx - 5, sy + 3)], fill=(40, 120, 200))
-                        canvas.draw.rectangle([(sx + 5, sy - 3), (sx + 8, sy + 3)], fill=(40, 120, 200))
-                    canvas.draw.text((sx + 10, sy - 6), sat["id"], fill=s_col, font=font_sat)
+                if self.zoom < 5.0 and self.iss_orbit_track:
+                    t_pts = [self._project_ortho(lat, lon, cx, cy, globe_r) for lat, lon in self.iss_orbit_track]
+                    for i in range(len(t_pts) - 1):
+                        if t_pts[i][2] and t_pts[i + 1][2]:
+                            canvas.draw.line([(t_pts[i][0], t_pts[i][1]), (t_pts[i + 1][0], t_pts[i + 1][1])], fill=(180, 125, 25), width=1)
 
-            # Aircraft Blips on Globe (Stored for hover / click detection)
-            font_fl = get_font(9, bold=True)
-            for fl in self.flights:
-                fx, fy, is_fvis = self._project_ortho(fl["lat"], fl["lon"], cx, cy, globe_r)
-                if is_fvis and (vx <= fx <= vx + vw and vy <= fy <= vy + vh):
-                    fl["_screen_x"] = fx
-                    fl["_screen_y"] = fy
-                    canvas.draw.ellipse([(fx - 3, fy - 3), (fx + 3, fy + 3)], fill=COLOR_CYBER_CYAN, outline=COLOR_TEXT_PRIMARY)
-                    if self.zoom >= 1.8:
-                        canvas.draw.text((fx + 5, fy - 6), fl["callsign"], fill=COLOR_CYBER_CYAN, font=font_fl)
-                else:
-                    if self.zoom < 2.5:
-                        fl["_screen_x"] = None
-                        fl["_screen_y"] = None
+                font_sat = get_font(10, bold=True)
+                for sat in self.satellites:
+                    sx, sy, is_vis = self._project_ortho(sat["lat"], sat["lon"], cx, cy, globe_r)
+                    if is_vis and (vx - 10 <= sx <= vx + vw + 10 and vy - 10 <= sy <= vy + vh + 10):
+                        s_col = sat["col"]
+                        canvas.draw.ellipse([(sx - 4, sy - 4), (sx + 4, sy + 4)], fill=s_col, outline=COLOR_TEXT_PRIMARY)
+                        if sat["id"] == "ISS":
+                            canvas.draw.line([(sx - 8, sy), (sx + 8, sy)], fill=COLOR_FLIPPER_AMBER, width=2)
+                            canvas.draw.rectangle([(sx - 8, sy - 3), (sx - 5, sy + 3)], fill=(40, 120, 200))
+                            canvas.draw.rectangle([(sx + 5, sy - 3), (sx + 8, sy + 3)], fill=(40, 120, 200))
+                        canvas.draw.text((sx + 10, sy - 6), sat["id"], fill=s_col, font=font_sat)
 
         # ----------------------------------------------------------------------
-        # 2. Render Tactical Airspace Radar (Overlaid / Primary when Zoom >= 2.5)
+        # Tactical Radar Overlay (Range Rings, Sweep, Crosshairs)
         # ----------------------------------------------------------------------
-        if self.zoom >= 2.5:
-            radar_r = 235
-            # Range rings
-            for r_pct, km_val in [(0.25, "25km"), (0.50, "50km"), (0.75, "100km"), (1.0, "150km")]:
-                cr = int(radar_r * r_pct)
-                canvas.draw.ellipse([(cx - cr, cy - cr), (cx + cr, cy + cr)], outline=(24, 54, 84), width=1)
-                canvas.draw.text((cx + 6, cy - cr + 4), km_val, fill=(60, 100, 140), font=get_font(10, bold=False))
+        # Radar scope range rings
+        for r_pct, km_val in [(0.25, "25km"), (0.50, "50km"), (0.75, "100km"), (1.0, "150km")]:
+            cr = int(radar_r * r_pct)
+            canvas.draw.ellipse([(cx - cr, cy - cr), (cx + cr, cy + cr)], outline=(0, 220, 255, 110), width=1)
+            canvas.draw.text((cx + 6, cy - cr + 4), km_val, fill=COLOR_CYBER_CYAN, font=get_font(10, bold=False))
 
-            # Crosshairs
-            canvas.draw.line([(cx - radar_r, cy), (cx + radar_r, cy)], fill=(24, 54, 84), width=1)
-            canvas.draw.line([(cx, cy - radar_r), (cx, cy + radar_r)], fill=(24, 54, 84), width=1)
+        # Crosshairs & Scope Outer Ring
+        canvas.draw.ellipse([(cx - radar_r, cy - radar_r), (cx + radar_r, cy + radar_r)], outline=COLOR_CYBER_CYAN, width=2)
+        canvas.draw.line([(cx - radar_r, cy), (cx + radar_r, cy)], fill=(0, 220, 255, 90), width=1)
+        canvas.draw.line([(cx, cy - radar_r), (cx, cy + radar_r)], fill=(0, 220, 255, 90), width=1)
 
-            # Rotating Radar Sweep Beam
-            rad = math.radians(self.sweep_angle)
-            sw_x = cx + int(radar_r * math.cos(rad))
-            sw_y = cy + int(radar_r * math.sin(rad))
-            canvas.draw.line([(cx, cy), (sw_x, sw_y)], fill=COLOR_CYBER_CYAN, width=2)
-
-            # Draw ADS-B Aircraft in Tactical Airspace
-            font_plane = get_font(11, bold=True)
-            for fl in self.flights:
-                # Scale relative to observer ground station
-                scale_km = (150.0 / max(2.5, self.zoom * 0.4))
-                dx_km = (fl["lon"] - self.obs_lon) * 67.5
-                dy_km = (fl["lat"] - self.obs_lat) * 111.2
-                scale = radar_r / scale_km
-                ax = cx + int(dx_km * scale)
-                ay = cy - int(dy_km * scale)
-
-                # Store screen coordinates for hover/pointer interaction
-                fl["_screen_x"] = ax
-                fl["_screen_y"] = ay
-
-                if (ax - cx) ** 2 + (ay - cy) ** 2 <= radar_r ** 2:
-                    t_rad = math.radians(fl.get("track", 0.0) - 90)
-                    p_len = 11
-                    tip_x = ax + int(math.cos(t_rad) * p_len)
-                    tip_y = ay + int(math.sin(t_rad) * p_len)
-                    tail_l_x = ax + int(math.cos(t_rad + 2.5) * (p_len * 0.8))
-                    tail_l_y = ay + int(math.sin(t_rad + 2.5) * (p_len * 0.8))
-                    tail_r_x = ax + int(math.cos(t_rad - 2.5) * (p_len * 0.8))
-                    tail_r_y = ay + int(math.sin(t_rad - 2.5) * (p_len * 0.8))
-
-                    is_sel = (self.selected_flight == fl) or (self.hovered_flight == fl)
-                    p_col = COLOR_FLIPPER_AMBER if is_sel else COLOR_CYBER_CYAN
-
-                    canvas.draw.polygon([(tip_x, tip_y), (tail_l_x, tail_l_y), (ax, ay), (tail_r_x, tail_r_y)], fill=p_col)
-                    fl_level = int(fl.get("alt_m", 10000) * 3.28084 / 100)
-                    canvas.draw.text((ax + 10, ay - 8), f"{fl['callsign']}\nFL{fl_level:03d}", fill=COLOR_TEXT_PRIMARY, font=font_plane)
+        # Rotating Radar Sweep Beam
+        rad = math.radians(self.sweep_angle)
+        sw_x = cx + int(radar_r * math.cos(rad))
+        sw_y = cy + int(radar_r * math.sin(rad))
+        canvas.draw.line([(cx, cy), (sw_x, sw_y)], fill=COLOR_CYBER_CYAN, width=2)
 
         # ----------------------------------------------------------------------
-        # Target Reticle on Hovered / Selected Flight
+        # Aircraft Rendering on Radar / Map
         # ----------------------------------------------------------------------
-        active_fl = self.hovered_flight or self.selected_flight
-        if active_fl:
-            hx = active_fl.get("_screen_x")
-            hy = active_fl.get("_screen_y")
-            if hx is not None and hy is not None and (vx <= hx <= vx + vw and vy <= hy <= vy + vh):
-                # Lock-on Reticle
-                pulse_r = 14 + int(abs(math.sin(time.time() * 5.0)) * 4)
-                canvas.draw.ellipse([(hx - pulse_r, hy - pulse_r), (hx + pulse_r, hy + pulse_r)],
+        font_plane = get_font(11, bold=True)
+        scale_km = (150.0 / max(1.0, self.zoom * 0.45))
+
+        for idx, fl in enumerate(self.flights):
+            dx_km = (fl["lon"] - self.obs_lon) * 67.5
+            dy_km = (fl["lat"] - self.obs_lat) * 111.2
+            scale = radar_r / scale_km
+            ax = cx + int(dx_km * scale)
+            ay = cy - int(dy_km * scale)
+
+            fl["_screen_x"] = ax
+            fl["_screen_y"] = ay
+
+            if (ax - cx) ** 2 + (ay - cy) ** 2 <= radar_r ** 2:
+                t_rad = math.radians(fl.get("track", 0.0) - 90)
+                p_len = 11
+                tip_x = ax + int(math.cos(t_rad) * p_len)
+                tip_y = ay + int(math.sin(t_rad) * p_len)
+                tail_l_x = ax + int(math.cos(t_rad + 2.5) * (p_len * 0.8))
+                tail_l_y = ay + int(math.sin(t_rad + 2.5) * (p_len * 0.8))
+                tail_r_x = ax + int(math.cos(t_rad - 2.5) * (p_len * 0.8))
+                tail_r_y = ay + int(math.sin(t_rad - 2.5) * (p_len * 0.8))
+
+                is_targeted = (idx == self.target_flight_idx)
+                p_col = COLOR_FLIPPER_AMBER if is_targeted else COLOR_CYBER_CYAN
+
+                canvas.draw.polygon([(tip_x, tip_y), (tail_l_x, tail_l_y), (ax, ay), (tail_r_x, tail_r_y)], fill=p_col)
+                fl_level = int(fl.get("alt_m", 10000) * 3.28084 / 100)
+                canvas.draw.text((ax + 10, ay - 8), f"{fl['callsign']}\nFL{fl_level:03d}", fill=COLOR_TEXT_PRIMARY, font=font_plane)
+
+        # ----------------------------------------------------------------------
+        # PHYSICAL GAMEPAD TARGET LOCK-ON HUD (TrimUI Brick)
+        # ----------------------------------------------------------------------
+        if self.flights and 0 <= self.target_flight_idx < len(self.flights):
+            locked_fl = self.flights[self.target_flight_idx]
+            lx = locked_fl.get("_screen_x")
+            ly = locked_fl.get("_screen_y")
+
+            if lx is not None and ly is not None and (vx <= lx <= vx + vw and vy <= ly <= vy + vh):
+                # 1. Pulsing Lock-On Reticle
+                pulse_r = 15 + int(abs(math.sin(time.time() * 7.0)) * 4)
+                canvas.draw.ellipse([(lx - pulse_r, ly - pulse_r), (lx + pulse_r, ly + pulse_r)],
                                     outline=COLOR_FLIPPER_AMBER, width=2)
-                canvas.draw.line([(hx - pulse_r - 4, hy), (hx - pulse_r + 2, hy)], fill=COLOR_FLIPPER_AMBER, width=2)
-                canvas.draw.line([(hx + pulse_r - 2, hy), (hx + pulse_r + 4, hy)], fill=COLOR_FLIPPER_AMBER, width=2)
-                canvas.draw.line([(hx, hy - pulse_r - 4), (hx, hy - pulse_r + 2)], fill=COLOR_FLIPPER_AMBER, width=2)
-                canvas.draw.line([(hx, hy + pulse_r - 2), (hx, hy + pulse_r + 4)], fill=COLOR_FLIPPER_AMBER, width=2)
 
-                # Tooltip prompt
-                canvas.draw_badge(max(vx + 10, min(vx + vw - 220, hx - 100)),
-                                  max(vy + 10, hy - pulse_r - 26),
-                                  f"✈ {active_fl['callsign']} [KLIKNIJ PO DANE]",
-                                  bg_color=(20, 32, 48), text_color=COLOR_CYBER_CYAN)
+                # 2. Military Corner Brackets [ ┌ ┐ └ ┘ ]
+                b_size = 22
+                c_len = 7
+                # Top-Left
+                canvas.draw.line([(lx - b_size, ly - b_size), (lx - b_size + c_len, ly - b_size)], fill=COLOR_FLIPPER_AMBER, width=2)
+                canvas.draw.line([(lx - b_size, ly - b_size), (lx - b_size, ly - b_size + c_len)], fill=COLOR_FLIPPER_AMBER, width=2)
+                # Top-Right
+                canvas.draw.line([(lx + b_size, ly - b_size), (lx + b_size - c_len, ly - b_size)], fill=COLOR_FLIPPER_AMBER, width=2)
+                canvas.draw.line([(lx + b_size, ly - b_size), (lx + b_size, ly - b_size + c_len)], fill=COLOR_FLIPPER_AMBER, width=2)
+                # Bottom-Left
+                canvas.draw.line([(lx - b_size, ly + b_size), (lx - b_size + c_len, ly + b_size)], fill=COLOR_FLIPPER_AMBER, width=2)
+                canvas.draw.line([(lx - b_size, ly + b_size), (lx - b_size, ly + b_size - c_len)], fill=COLOR_FLIPPER_AMBER, width=2)
+                # Bottom-Right
+                canvas.draw.line([(lx + b_size, ly + b_size), (lx + b_size - c_len, ly + b_size)], fill=COLOR_FLIPPER_AMBER, width=2)
+                canvas.draw.line([(lx + b_size, ly + b_size), (lx + b_size, ly + b_size - c_len)], fill=COLOR_FLIPPER_AMBER, width=2)
+
+                # 3. Leader Line & Tactical Target Banner
+                tag_x = max(vx + 10, min(vx + vw - 280, lx - 140))
+                tag_y = max(vy + 10, ly - b_size - 32)
+                canvas.draw.line([(lx, ly - b_size), (tag_x + 100, tag_y + 24)], fill=COLOR_FLIPPER_AMBER, width=1)
+
+                fl_fl = int(locked_fl.get("alt_m", 10000) * 3.28084 / 100)
+                tag_txt = f"⌖ CEL #{self.target_flight_idx + 1}: {locked_fl['callsign']} | FL{fl_fl:03d} | [A]: KARTA LOTU"
+                canvas.draw_badge(tag_x, tag_y, tag_txt, bg_color=(20, 28, 42), text_color=COLOR_FLIPPER_AMBER)
 
         # Observer Ground Station Reticle / Target Pin
         ox, oy, o_vis = self._project_ortho(self.obs_lat, self.obs_lon, cx, cy, globe_r)
@@ -985,13 +1117,16 @@ class AirRadarModule(BaseModule):
             canvas.draw.line([(ox, oy - 10), (ox, oy + 10)], fill=COLOR_FLIPPER_AMBER, width=1)
             canvas.draw.text((ox + 10, oy - 14), f"● {self.obs_name}", fill=COLOR_FLIPPER_AMBER, font=get_font(11, bold=True))
 
-        # Bottom Zoom Slider & Orientation Info Bar
+        # Top-Right Map Mode Indicator Badge
+        canvas.draw_badge(vx + vw - 235, vy + 10, f"MAPA: {cur_mode_name}", bg_color=(18, 28, 42), text_color=COLOR_CYBER_CYAN)
+
+        # Bottom Zoom Slider & Gamepad Helper Bar
         z_y = vy + vh + 12
         canvas.draw.rounded_rectangle([(vx, z_y), (vx + vw, z_y + 36)], radius=6, fill=(18, 24, 34), outline=COLOR_BORDER)
         canvas.draw.text((vx + 14, z_y + 10),
-                         f"KAMERA: {self.cam_lat:+.2f}°N, {self.cam_lon:+.2f}°E  |  ZOOM: {self.zoom:.1f}x ({self.zoom_names[self.zoom_idx]})",
+                         f"KAMERA: {self.cam_lat:+.2f}°N, {self.cam_lon:+.2f}°E  |  ZOOM: {self.zoom:.1f}x  |  CEL: #{self.target_flight_idx + 1}/{len(self.flights)}",
                          fill=COLOR_TEXT_SECONDARY, font=get_font(11, bold=True))
-        canvas.draw_badge(vx + vw - 175, z_y + 6, "[X/Y/KÓŁKO] ZOOM", bg_color=(36, 48, 64), text_color=COLOR_CYBER_CYAN)
+        canvas.draw_badge(vx + vw - 190, z_y + 6, "[L1/R1]: ZMIEŃ CEL", bg_color=(36, 48, 64), text_color=COLOR_FLIPPER_AMBER)
 
         # ----------------------------------------------------------------------
         # Right Panel: Satellite & Air Telemetry Deck (w=316, h=634)
@@ -1012,18 +1147,19 @@ class AirRadarModule(BaseModule):
         canvas.draw.text((rx + 12, ry + 10), "STACJA OBSERWACYJNA:", fill=COLOR_TEXT_SECONDARY, font=get_font(10, bold=True))
         canvas.draw.text((rx + 12, ry + 26), f"● {self.obs_name[:20]}", fill=COLOR_TEXT_PRIMARY, font=get_font(14, bold=True))
         canvas.draw.text((rx + 12, ry + 48), f"GPS: {self.obs_lat:.4f}°N, {self.obs_lon:.4f}°E", fill=COLOR_CYBER_CYAN, font=get_font(11, bold=False))
-        canvas.draw_badge(rx + 12, ry + 78, "[B] ZMIEŃ BAZĘ / GPS", bg_color=(36, 52, 72), text_color=COLOR_FLIPPER_AMBER)
+        canvas.draw_badge(rx + 12, ry + 78, "[B] ZMIEŃ BAZĘ (GPS)", bg_color=(36, 52, 72), text_color=COLOR_FLIPPER_AMBER)
 
-        # 2. Selected Aircraft Quick Card
+        # 2. Selected Aircraft Quick Card (Snapped to locked target)
         ac_y = ry + 126
-        sel_fl = self.selected_flight or (self.flights[0] if self.flights else None)
-        canvas.draw.rounded_rectangle([(rx, ac_y), (rx + rw, ac_y + 195)], radius=8, fill=(20, 26, 36), outline=COLOR_BORDER)
-        canvas.draw.text((rx + 12, ac_y + 10), "✈ WYBRANY LOT ADS-B", fill=COLOR_CYBER_CYAN, font=get_font(12, bold=True))
+        sel_fl = self.selected_flight or (self.flights[self.target_flight_idx] if self.flights else None)
+        canvas.draw.rounded_rectangle([(rx, ac_y), (rx + rw, ac_y + 195)], radius=8, fill=(20, 26, 36), outline=COLOR_FLIPPER_AMBER, width=2)
+        canvas.draw.text((rx + 12, ac_y + 10), f"⌖ CEL #{self.target_flight_idx + 1}: {sel_fl['callsign'] if sel_fl else '---'}",
+                         fill=COLOR_FLIPPER_AMBER, font=get_font(12, bold=True))
         canvas.draw.line([(rx + 12, ac_y + 30), (rx + rw - 12, ac_y + 30)], fill=COLOR_BORDER, width=1)
 
         if sel_fl:
             fl_items = [
-                ("Znak (Callsign):", f"{sel_fl['callsign']}"),
+                ("Linia:", f"{sel_fl.get('airline', 'N/A')[:18]}"),
                 ("Model:", f"{sel_fl.get('model', 'Boeing 737')[:16]}"),
                 ("Wysokość:", f"FL{int(sel_fl.get('alt_m', 0) * 3.28084 / 100):03d} ({int(sel_fl.get('alt_m', 0))} m)"),
                 ("Prędkość:", f"{sel_fl.get('speed_kmh', 0)} km/h"),
@@ -1032,9 +1168,9 @@ class AirRadarModule(BaseModule):
             s_y = ac_y + 38
             for lbl, val in fl_items:
                 canvas.draw.text((rx + 12, s_y), lbl, fill=COLOR_TEXT_SECONDARY, font=get_font(10, bold=False))
-                canvas.draw.text((rx + 115, s_y), val, fill=COLOR_TEXT_PRIMARY, font=get_font(11, bold=True))
+                canvas.draw.text((rx + 105, s_y), val, fill=COLOR_TEXT_PRIMARY, font=get_font(11, bold=True))
                 s_y += 22
-            canvas.draw_badge(rx + 12, ac_y + 155, "[A / KLIK] OTWÓRZ ZDJĘCIE", bg_color=(24, 45, 65), text_color=COLOR_CYBER_CYAN)
+            canvas.draw_badge(rx + 12, ac_y + 155, "[A] ZOBACZ ZDJĘCIE & DANE", bg_color=(24, 45, 65), text_color=COLOR_CYBER_CYAN)
 
         # 3. ISS Real-Time Flight Card
         iss_y = ac_y + 206

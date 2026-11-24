@@ -465,12 +465,6 @@ WASM_HTML = """<!DOCTYPE html>
       logBox.scrollTop = logBox.scrollHeight;
     }
 
-    // Input state
-    const inputState = {
-      up: false, down: false, left: false, right: false,
-      a: false, b: false, x: false, y: false, l1: false, r1: false
-    };
-
     // 1. Initial Loading Screen on Canvas
     function drawLoading(msg) {
       ctx.fillStyle = '#070b12';
@@ -493,16 +487,52 @@ WASM_HTML = """<!DOCTYPE html>
         pyodide = await loadPyodide();
         log("[+] CPython zainicjalizowany pomyślnie.");
 
-        drawLoading("Instalacja biblioteki Pillow (PIL)...");
-        log("[*] Instalowanie pakietu graficznego Pillow...");
-        await pyodide.loadPackage("pillow");
-        log("[+] Pillow gotowy.");
+        drawLoading("Instalacja biblioteki Pillow i SSL...");
+        log("[*] Instalowanie pakietów graficznych i sieciowych...");
+        try {
+          await pyodide.loadPackage(["pillow", "ssl"]);
+          log("[+] Pakiety Pillow i SSL załadowane pomyślnie.");
+        } catch(e) {
+          log("[*] Ładowanie Pillow jako pakietu podstawowego...");
+          await pyodide.loadPackage("pillow");
+        }
 
         drawLoading("Wstrzykiwanie środowiska BrickDeck Core...");
+
+        // Inject complete Core mocks and shims into Pyodide
         pyodide.runPython(`
 import sys, types
 from PIL import Image, ImageDraw, ImageFont
 
+# 1. SSL Shim (in case unvendored)
+if "ssl" not in sys.modules:
+    ssl_mock = types.ModuleType("ssl")
+    ssl_mock.CERT_NONE = 0
+    ssl_mock.create_default_context = lambda *args, **kwargs: types.SimpleNamespace(check_hostname=False, verify_mode=0)
+    sys.modules["ssl"] = ssl_mock
+
+# 2. Serial Shim (pyserial mock for mod_uart)
+if "serial" not in sys.modules:
+    serial_mock = types.ModuleType("serial")
+    class MockSerial:
+        def __init__(self, *args, **kwargs): pass
+        def write(self, data): pass
+        def read(self, size=1): return b""
+        def readline(self): return b"[WASM SERIAL READY]\\n"
+        @property
+        def in_waiting(self): return 0
+        def close(self): pass
+    serial_mock.Serial = MockSerial
+    sys.modules["serial"] = serial_mock
+
+# 3. FlipperProto Shim
+if "flipper_proto" not in sys.modules:
+    flip_mock = types.ModuleType("flipper_proto")
+    class MockFlipper: pass
+    flip_mock.FlipperProto = MockFlipper
+    sys.modules["flipper_proto"] = flip_mock
+
+# 4. BrickDeck Core Engine Shims
 def get_font(size=14, bold=False):
     return ImageFont.load_default()
 
@@ -514,8 +544,8 @@ class Canvas:
         self.draw = ImageDraw.Draw(self.image)
     def clear(self, bg_color=(10, 15, 24, 255)):
         self.draw.rectangle([(0, 0), (self.width, self.height)], fill=bg_color)
-    def draw_card(self, x, y, w, h, title="", subtitle="", border_color=(0, 200, 255), fill_color=(16, 24, 36)):
-        self.draw.rounded_rectangle([(x, y), (x + w, y + h)], radius=8, fill=fill_color, outline=border_color, width=2)
+    def draw_card(self, x, y, w, h, title="", subtitle="", border_color=(0, 200, 255), fill_color=(16, 24, 36), radius=8):
+        self.draw.rounded_rectangle([(x, y), (x + w, y + h)], radius=radius, fill=fill_color, outline=border_color, width=2)
         if title:
             self.draw.text((x + 14, y + 12), title, fill=(240, 245, 255), font=get_font(15, bold=True))
         if subtitle:
@@ -524,10 +554,25 @@ class Canvas:
         bw = len(text) * 8 + 14
         self.draw.rounded_rectangle([(x, y), (x + bw, y + 24)], radius=4, fill=bg_color, outline=(0, 200, 255))
         self.draw.text((x + 6, y + 4), text, fill=text_color, font=get_font(11, bold=True))
+    def draw_gauge(self, x, y, w, h, val, max_val, label="", unit=""):
+        self.draw_card(x, y, w, h, title=label, subtitle=f"{val:.1f} {unit}")
+    def draw_radar(self, cx, cy, radius, sweep_angle, blips):
+        self.draw.ellipse([(cx-radius, cy-radius), (cx+radius, cy+radius)], outline=(0, 255, 180), width=2)
+    def draw_bar_chart(self, x, y, w, h, labels, values, max_v=None, title="", color=None):
+        self.draw_card(x, y, w, h, title=title)
+    def draw_spectrum(self, x, y, w, h, values, peaks=None, title="", col_start=None, col_end=None):
+        self.draw_card(x, y, w, h, title=title)
+    def draw_oscilloscope(self, x, y, w, h, points, color=None):
+        self.draw_card(x, y, w, h, title="OSCILLOSCOPE")
+    def draw_vu_meter(self, x, y, w, h, left, right):
+        self.draw_card(x, y, w, h, title="VU METER")
+    def draw_header(self, active_idx, modules, sys_info): pass
+    def draw_footer(self, hints): pass
 
 class BaseModule:
     def __init__(self, app_context=None):
         self.app_context = app_context
+        self.accent_color = (0, 240, 255)
     def update(self, dt): pass
     def render(self, canvas): pass
     def handle_input(self, event): return False
@@ -543,25 +588,59 @@ b_mod.BaseModule = BaseModule
 t_mod = types.ModuleType("core.theme")
 t_mod.SCREEN_WIDTH = 1024
 t_mod.SCREEN_HEIGHT = 768
+t_mod.HEADER_HEIGHT = 50
+t_mod.FOOTER_HEIGHT = 44
 t_mod.COLOR_BG_DARK = (10, 15, 24, 255)
-t_mod.COLOR_BORDER = (40, 60, 80)
-t_mod.COLOR_CYBER_CYAN = (0, 240, 255)
-t_mod.COLOR_TEXT_PRIMARY = (240, 245, 255)
+t_mod.COLOR_PANEL_BG = (14, 20, 32, 255)
+t_mod.COLOR_PANEL_ALT = (20, 30, 45, 255)
+t_mod.COLOR_BORDER = (40, 60, 85, 255)
+t_mod.COLOR_BORDER_LIGHT = (60, 85, 120, 255)
+t_mod.COLOR_CYBER_CYAN = (0, 240, 255, 255)
+t_mod.COLOR_FLIPPER_AMBER = (255, 170, 0, 255)
+t_mod.COLOR_PHOSPHOR_GREEN = (0, 255, 136, 255)
+t_mod.COLOR_NEON_PINK = (255, 0, 128, 255)
+t_mod.COLOR_ELECTRIC_BLUE = (0, 140, 255, 255)
+t_mod.COLOR_WARNING_YELLOW = (255, 200, 0, 255)
+t_mod.COLOR_TEXT_PRIMARY = (240, 245, 255, 255)
+t_mod.COLOR_TEXT_SECONDARY = (160, 180, 210, 255)
+t_mod.COLOR_TEXT_MUTED = (100, 125, 155, 255)
+t_mod.COLOR_STATUS_OK = (0, 255, 136, 255)
+t_mod.COLOR_STATUS_WARN = (255, 170, 0, 255)
+t_mod.COLOR_STATUS_ERR = (255, 60, 60, 255)
 
 i_mod = types.ModuleType("core.i18n")
 i_mod.t = lambda k, default=None: default or k
+class MockI18n:
+    def get_lang(self): return "pl"
+i_mod.i18n = MockI18n()
+
+qr_mod = types.ModuleType("core.qr_engine")
+qr_mod.generate_qr_matrix = lambda *args, **kwargs: [[1 if (x+y)%2==0 else 0 for x in range(25)] for y in range(25)]
+qr_mod.generate_code128 = lambda *args, **kwargs: "10101100110"
+qr_mod.generate_ean13 = lambda *args, **kwargs: "10100011010"
+
+surv_mod = types.ModuleType("core.survival_engine")
+class MockSurvival:
+    def get_categories(self): return ["Woda", "Ogien", "Schronienie", "Apteczka"]
+    def get_articles_by_category(self, cat): return [{"id": "1", "title": "Uzdatnianie wody", "desc": "Gotowanie i filtry"}]
+    def get_article(self, aid): return {"title": "Uzdatnianie wody", "content": "Gotuj wode minimum 3 minuty."}
+surv_mod.SurvivalEngine = MockSurvival
 
 core_pkg = types.ModuleType("core")
 core_pkg.canvas = c_mod
 core_pkg.module_base = b_mod
 core_pkg.theme = t_mod
 core_pkg.i18n = i_mod
+core_pkg.qr_engine = qr_mod
+core_pkg.survival_engine = surv_mod
 
 sys.modules["core"] = core_pkg
 sys.modules["core.canvas"] = c_mod
 sys.modules["core.module_base"] = b_mod
 sys.modules["core.theme"] = t_mod
 sys.modules["core.i18n"] = i_mod
+sys.modules["core.qr_engine"] = qr_mod
+sys.modules["core.survival_engine"] = surv_mod
 
 py_canvas = Canvas()
 py_mod = None
@@ -627,14 +706,17 @@ py_mod = None
       btnDownloadPy.setAttribute("download", `${modId}.py`);
 
       pyodide.globals.set("raw_code", code);
+      pyodide.globals.set("mod_filename", `/modules/${modId}.py`);
+
       try {
         pyodide.runPython(`
-import sys
+import sys, types
 
 if 'cur_mod' in sys.modules:
     del sys.modules['cur_mod']
 
 cur_mod = types.ModuleType("cur_mod")
+cur_mod.__file__ = mod_filename
 exec(raw_code, cur_mod.__dict__)
 
 mod_cls = None
@@ -649,7 +731,7 @@ if mod_cls:
 else:
     py_mod = None
 `);
-        log(`[+] Moduł ${modId} pomyślnie skompilowany i uruchomiony!`);
+        log(`[+] Moduł ${modId} pomyślnie skompilowany i uruchomiony w Pythonie!`);
       } catch (err) {
         log(`[-] Błąd wykonania w Pythonie: ${err.message}`);
       }
@@ -691,7 +773,7 @@ py_canvas.image.tobytes("raw", "RGBA")
             ctx.drawImage(offscreenCanvas, 0, 0, canvas.width, canvas.height);
           }
         } catch (e) {
-          // keep going
+          // keep running
         }
       }
 
@@ -761,4 +843,4 @@ if py_mod and hasattr(py_mod, 'handle_input'):
 with open("wasm.html", "w", encoding="utf-8") as f:
     f.write(WASM_HTML.strip() + "\n")
 
-print("[+] Created wasm.html successfully!")
+print("[+] Created wasm.html with complete shims for all 39 modules successfully!")

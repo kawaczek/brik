@@ -1,14 +1,19 @@
 """
-BrickDeck Module: Storm & Precipitation Radar (IMGW / RainViewer / Open-Meteo)
-Live weather radar and storm front tracking over Gorzów Wielkopolski and Western Poland.
-Supports real-time online data fetching (live Gorzów weather station & POLRAD/RainViewer timeline)
-with automatic fallback to deterministic offline regional simulation for TrimUI Brick and WASM.
-Includes multi-level map zoom (1.0x-4.0x), map panning, font scaling (12pt-22pt), and fullscreen radar mode.
+BrickDeck Module: 003_mod_rain.py - 16-bit Pixel Art Weather & Radar Adventure
+Pure retro 16-bit arcade / RPG weather simulation for TrimUI Brick & WebAssembly (1024x768).
+Features:
+- Dual View System (toggled with [X]):
+  1. Side-view 2D Pixel Art: Animated hero with umbrella, Gorzów riverside boulevard & bridge,
+     real day/night/sunset lighting, falling rain/snow particles, streetlamp glow, and JRPG dialog box.
+  2. Top-down 16-bit Overworld Map: SNES-style RPG map of Western Poland with river tiles,
+     castle towns, moving pixel clouds, and rainfall echoes.
+- Real-time online Open-Meteo & RainViewer live station data with seamless offline simulation fallback.
 """
 
 import math
 import time
 import json
+import random
 import datetime
 from typing import List, Dict, Tuple, Optional
 from PIL import Image, ImageDraw
@@ -21,87 +26,211 @@ from core.theme import (
 )
 from core.canvas import get_font
 
-# Regional Coordinates Bounds (Western Poland & Border)
-MAP_BOUNDS = {
-    "lat_min": 51.5,
-    "lat_max": 53.8,
-    "lon_min": 13.5,
-    "lon_max": 17.5
+# -----------------------------------------------------------------------------
+# Pixel Art Palette
+# -----------------------------------------------------------------------------
+PALETTE = {
+    # Sky Gradients
+    "sky_day_top": (50, 130, 220),
+    "sky_day_bot": (130, 200, 255),
+    "sky_sunset_top": (40, 25, 75),
+    "sky_sunset_mid": (180, 70, 70),
+    "sky_sunset_bot": (255, 170, 60),
+    "sky_night_top": (8, 12, 24),
+    "sky_night_bot": (22, 32, 54),
+    "sky_storm_top": (16, 20, 28),
+    "sky_storm_bot": (45, 55, 70),
+
+    # Environment
+    "stars": (240, 245, 255),
+    "moon": (255, 250, 200),
+    "moon_crater": (210, 200, 160),
+    "sun": (255, 225, 60),
+    "cloud_day": (245, 248, 255),
+    "cloud_day_shadow": (180, 195, 215),
+    "cloud_night": (40, 52, 75),
+    "cloud_night_shadow": (26, 34, 52),
+    "bridge_silhouette": (18, 24, 38),
+    "bridge_lights": (255, 180, 40),
+    "water_deep": (18, 50, 95),
+    "water_surface": (32, 90, 160),
+    "water_wave": (80, 160, 230),
+    "pavement_dark": (35, 42, 55),
+    "pavement_light": (50, 60, 78),
+    "curb": (70, 82, 105),
+    "lamp_post": (20, 26, 36),
+    "lamp_glow": (255, 220, 100),
+
+    # Hero & Umbrella
+    "k": (16, 20, 28),       # outline black
+    "skin": (255, 210, 170),
+    "skin_shad": (215, 165, 130),
+    "coat_red": (215, 45, 55),
+    "coat_dark": (155, 25, 35),
+    "scarf": (255, 200, 40),
+    "pants": (40, 70, 140),
+    "boots": (50, 35, 25),
+    "umbrella_red": (230, 40, 50),
+    "umbrella_yellow": (255, 210, 30),
+    "umbrella_rim": (255, 255, 255),
+    "rain_drop": (120, 210, 255),
+    "splash": (220, 245, 255)
 }
 
-CITIES = [
-    ("GORZÓW WLKP.", 15.233, 52.733, True),
-    ("Szczecin", 14.553, 53.428, False),
-    ("Poznań", 16.925, 52.406, False),
-    ("Zielona Góra", 15.506, 51.935, False),
-    ("Kostrzyn n/O.", 14.650, 52.590, False),
-    ("Berlin", 13.405, 52.520, False),
-    ("Frankfurt (O)", 14.550, 52.340, False)
+# -----------------------------------------------------------------------------
+# Sprite Definitions (ASCII matrices)
+# -----------------------------------------------------------------------------
+# Hero Standing Body (14 wide x 22 high)
+HERO_BODY = [
+    ".....kkkk.....",
+    "....kssssk....",
+    "....kssssk....",
+    "...kssssssk...",
+    "...ksskskss...",
+    "...ksksksks...",
+    "...kssssssk...",
+    "....kffffk....",
+    "....kffffk....",
+    "...kyyyyyk....",
+    "..kccccccc....",
+    ".kccccccccc...",
+    ".kccccccccc...",
+    ".kccccccccc...",
+    "..kccccccc....",
+    "...kpp.ppk....",
+    "...kpp.ppk....",
+    "...kpp.ppk....",
+    "...kpp.ppk....",
+    "...kbb.bbk....",
+    "...kbb.bbk....",
+    "....kk..kk...."
 ]
 
-RIVER_ODRA = [
-    (15.05, 51.80), (14.95, 52.05), (14.68, 52.35), (14.65, 52.59),
-    (14.40, 52.85), (14.30, 53.15), (14.55, 53.45)
+# Open Umbrella (24 wide x 11 high)
+UMBRELLA_OPEN = [
+    "...........kk...........",
+    "........kkk..kkk........",
+    ".....kkkrrrrrryykkk.....",
+    "...kkrrrrrrrryyyyyykk...",
+    "..krrrrrrrrrryyyyyyyyk..",
+    ".krrrrrrrrrrryyyyyyyyyk.",
+    "krrrrrrrrrrrryyyyyyyyyyk",
+    "krrrrrrrrrrrryyyyyyyyyyk",
+    "kkkkkrrrrrkkkkyyyykkkkkk",
+    "...........kk...........",
+    "...........kk..........."
 ]
 
-RIVER_WARTA = [
-    (17.20, 52.10), (16.95, 52.40), (15.90, 52.65), (15.23, 52.73), (14.65, 52.59)
+# Closed Umbrella (4 wide x 18 high)
+UMBRELLA_CLOSED = [
+    ".kk.",
+    "kryk",
+    "kryk",
+    "kryk",
+    "kryk",
+    "kryk",
+    "kryk",
+    "kryk",
+    "kryk",
+    "kryk",
+    "kryk",
+    "kryk",
+    ".kk.",
+    ".kk.",
+    ".kk.",
+    "k..k",
+    ".kk.",
+    "...."
 ]
 
-BORDER_PL_DE = [
-    (14.65, 52.59), (14.68, 52.35), (14.95, 52.05)
+# Victorian Street Lamp (8 wide x 36 high)
+STREET_LAMP = [
+    "...kk...",
+    "..kyyk..",
+    ".kyyyyk.",
+    "kwwwwwwk",
+    "kwwwwwwk",
+    "kwwwwwwk",
+    ".kyyyyk.",
+    "..kkkk..",
+    "...kk...",
+    "...kk...",
+    "...kk...",
+    "...kk...",
+    "...kk...",
+    "...kk...",
+    "...kk...",
+    "...kk...",
+    "...kk...",
+    "...kk...",
+    "...kk...",
+    "...kk...",
+    "...kk...",
+    "...kk...",
+    "...kk...",
+    "...kk...",
+    "...kk...",
+    "...kk...",
+    "...kk...",
+    "...kk...",
+    "...kk...",
+    "...kk...",
+    "..kkkk..",
+    ".kssssk.",
+    ".kssssk.",
+    "kssssssk",
+    "kssssssk",
+    "kkkkkkkk"
 ]
 
-DBZ_LEVELS = [
-    (15, (0, 160, 255), "Lekki opad (0.5 mm/h)"),
-    (25, (50, 220, 80), "Umiarkowany deszcz (2 mm/h)"),
-    (35, (240, 200, 30), "Dość silny deszcz (6 mm/h)"),
-    (45, (255, 120, 20), "Ulewa / Silny deszcz (15 mm/h)"),
-    (55, (255, 30, 80), "Burza z ulewą (35 mm/h)"),
-    (65, (180, 20, 240), "Gwałtowna burza / Grad (>60 mm/h)")
+# Overworld RPG Town Castle (16 wide x 16 high)
+CASTLE_TOWN = [
+    "..k......k......",
+    ".krk....krk.....",
+    ".krk....krk.....",
+    "kwwk.kk.kwwk.k..",
+    "kwwk.kk.kwwk.k..",
+    "kwwwwwwwwwwk.k..",
+    "kwwwwwwwwwwkkk..",
+    "kwwwwwwwwwwwwk..",
+    "kwwkkwkkwkwwwk..",
+    "kwwwwwwwwwwwwk..",
+    "kwwwwkkwwwwwwk..",
+    "kwwwk..kwwwwwk..",
+    "kwwwk..kwwwwwk..",
+    "kkkkk..kkkkkkk..",
+    "................",
+    "................"
 ]
 
-WMO_WEATHER_CODES = {
-    0: "Bezchmurnie (Czyste niebo)",
+# Weather codes lookup
+WMO_NAMES = {
+    0: "Bezchmurnie",
     1: "Prawie bezchmurnie",
     2: "Częściowe zachmurzenie",
     3: "Pochmurno",
-    45: "Mgła",
-    48: "Osadzająca się szadź",
+    45: "Gęsta mgła",
     51: "Lekka mżawka",
-    53: "Umiarkowana mżawka",
-    55: "Gęsta mżawka",
-    56: "Marznąca mżawka",
-    57: "Gęsta marznąca mżawka",
+    53: "Mżawka",
     61: "Lekki deszcz",
     63: "Umiarkowany deszcz",
-    65: "Silny deszcz / Ulewa",
-    66: "Lekki marznący deszcz",
-    67: "Silny marznący deszcz",
-    71: "Niewielkie opady śniegu",
-    73: "Umiarkowane opady śniegu",
-    75: "Intensywne opady śniegu",
-    77: "Ziarna śniegu",
-    80: "Przelotny lekki deszcz",
-    81: "Przelotny deszcz",
-    82: "Gwałtowna ulewa",
-    85: "Przelotne opady śniegu",
-    86: "Intensywne opady śniegu",
+    65: "Ulewny deszcz",
+    71: "Opady śniegu",
+    80: "Przelotny deszcz",
+    81: "Silna ulewa",
     95: "Burza z piorunami",
-    96: "Burza z drobnym gradem",
-    99: "Gwałtowna burza z gradem"
+    96: "Burza z gradem"
 }
 
 
-def _deg_to_cardinal(deg: float) -> str:
-    dirs = ["N (Północ)", "NNE", "NE", "ENE", "E (Wschód)", "ESE", "SE", "SSE",
-            "S (Południe)", "SSW", "SW", "WSW", "W (Zachód)", "WNW", "NW", "NNW"]
+def _deg_to_compass(deg: float) -> str:
+    dirs = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+            "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
     ix = int((deg + 11.25) / 22.5) % 16
     return dirs[ix]
 
 
-def _fetch_url_json(url: str, timeout: int = 5) -> Optional[dict]:
-    # 1. Try Browser JS Bridge (WASM mode)
+def _fetch_url_json(url: str, timeout: int = 4) -> Optional[dict]:
     try:
         import js
         if hasattr(js, "brickFetchSync"):
@@ -111,7 +240,6 @@ def _fetch_url_json(url: str, timeout: int = 5) -> Optional[dict]:
     except Exception:
         pass
 
-    # 2. Try Pyodide open_url
     try:
         from pyodide.http import open_url
         content = open_url(url).read()
@@ -120,7 +248,6 @@ def _fetch_url_json(url: str, timeout: int = 5) -> Optional[dict]:
     except Exception:
         pass
 
-    # 3. Standard CPython (TrimUI Brick Linux)
     try:
         import urllib.request
         req = urllib.request.Request(url, headers={"User-Agent": "BrickDeck/1.0"})
@@ -134,351 +261,495 @@ def _fetch_url_json(url: str, timeout: int = 5) -> Optional[dict]:
 
 class RainRadarModule(BaseModule):
     name = "Storm & Precipitation Radar"
-    short_name = "Radar Opadów"
+    short_name = "Pixel Weather"
     icon = "🌧️"
-    accent_color = COLOR_ELECTRIC_BLUE
+    accent_color = (0, 240, 255)
 
     def __init__(self, app_context=None):
         super().__init__(app_context)
-        self.total_frames = 8
-        self.frame_idx = 7  # 0..7 (Last frame is NOW)
-        self.frame_labels = ["-70m", "-60m", "-50m", "-40m", "-30m", "-20m", "-10m", "TERAZ"]
+        # View Mode: 0 = Street View (Side-view 2D Pixel Art), 1 = RPG Overworld Radar (Top-down)
+        self.view_mode = 0
+        self.view_names = ["Ulica Gorzowa (Widok 2D)", "Strategiczy Radar (Mapa RPG)"]
+
+        # Animation states
+        self.time_counter = 0.0
         self.is_animating = True
-        self.anim_timer = 0.0
-        self.frame_duration = 0.9
+        self.breath_phase = 0.0
+        self.eye_blink = 0.0
+        self.lightning_flash = 0.0
 
-        # Zoom & Pan State
-        self.zoom_level = 1.0  # 1.0x to 4.0x
-        self.pan_x = 0
-        self.pan_y = 0
+        # Falling Particles (Rain drops / Snow)
+        random.seed(42)
+        self.particles = []
+        for _ in range(80):
+            self.particles.append({
+                "x": random.randint(0, 1024),
+                "y": random.randint(0, 520),
+                "speed": random.uniform(350, 600),
+                "len": random.randint(6, 14)
+            })
 
-        # Font scale: 0 = Standard (12pt), 1 = Powiększona (16pt), 2 = Duża (20pt)
-        self.font_scale_idx = 1
-        self.font_scale_labels = ["Standard (12pt)", "Powiększona (16pt)", "Maksymalna (20pt)"]
+        self.splashes = []
 
-        # View mode: False = Split panel, True = Fullscreen Radar
-        self.fullscreen_radar = False
-
-        # Live telemetry status
-        self.is_live = False
-        self.live_status_msg = "Ładowanie danych stacji..."
-        self.last_update_time_str = "--:--"
-        self.temp_str = "1.2 °C"
-        self.apparent_temp_str = "-1.9 °C"
-        self.humidity_str = "85%"
-        self.weather_condition_str = "Pochmurno"
-        self.precipitation_str = "0.0 mm/h"
-        self.wind_str = "6 km/h z W (Zachód)"
-        self.storm_risk_str = "Niskie (0% wyładowań)"
-        self.auto_refresh_timer = 0.0
-
-        # Radar Clusters (Simulated or adjusted from real rain rate)
-        self.clusters = [
-            {"base_lon": 13.9, "base_lat": 52.6, "radius_lon": 0.45, "radius_lat": 0.35, "dbz": 38},
-            {"base_lon": 14.3, "base_lat": 53.1, "radius_lon": 0.60, "radius_lat": 0.40, "dbz": 48},
-            {"base_lon": 16.2, "base_lat": 51.9, "radius_lon": 0.40, "radius_lat": 0.30, "dbz": 24},
+        # Drifting Clouds
+        self.clouds = [
+            {"x": 60, "y": 70, "scale": 4, "speed": 18},
+            {"x": 420, "y": 120, "scale": 3, "speed": 24},
+            {"x": 780, "y": 60, "scale": 5, "speed": 14},
         ]
 
-        # Initial live data fetch
+        # RPG Map Zoom & Pan
+        self.map_zoom = 1.0
+        self.map_pan_x = 0
+        self.map_pan_y = 0
+
+        # Telemetry State
+        self.is_live = False
+        self.station_time_str = "--:--"
+        self.temp_val = 1.2
+        self.temp_apparent = -1.9
+        self.weather_code = 3
+        self.weather_name = "Pochmurno"
+        self.precip_val = 0.0
+        self.wind_speed = 5.8
+        self.wind_dir_deg = 274.0
+        self.humidity = 85
+        self.is_raining = False
+        self.is_snowing = False
+        self.is_storm = False
+
+        # Try initial live weather fetch
         self._refresh_live_data()
 
     def _refresh_live_data(self):
-        """Fetch live Gorzów weather and RainViewer POLRAD radar frame timeline."""
-        # 1. Open-Meteo Gorzów Live Weather Station
-        url_om = (
+        url = (
             "https://api.open-meteo.com/v1/forecast?"
             "latitude=52.73&longitude=15.23&"
             "current=temperature_2m,relative_humidity_2m,apparent_temperature,"
             "precipitation,rain,weather_code,wind_speed_10m,wind_direction_10m&"
             "timezone=Europe%2FWarsaw"
         )
-        data_om = _fetch_url_json(url_om, timeout=4)
-        if data_om and "current" in data_om:
-            cur = data_om["current"]
-            self.temp_str = f"{cur.get('temperature_2m', 0.0):.1f} °C"
-            self.apparent_temp_str = f"{cur.get('apparent_temperature', 0.0):.1f} °C"
-            self.humidity_str = f"{cur.get('relative_humidity_2m', 0)}%"
-            precip = cur.get("precipitation", 0.0)
-            self.precipitation_str = f"{precip:.1f} mm/h"
+        data = _fetch_url_json(url, timeout=4)
+        if data and "current" in data:
+            c = data["current"]
+            self.temp_val = float(c.get("temperature_2m", 1.2))
+            self.temp_apparent = float(c.get("apparent_temperature", -1.9))
+            self.precip_val = float(c.get("precipitation", 0.0))
+            self.weather_code = int(c.get("weather_code", 3))
+            self.weather_name = WMO_NAMES.get(self.weather_code, "Zmiennie")
+            self.wind_speed = float(c.get("wind_speed_10m", 5.8))
+            self.wind_dir_deg = float(c.get("wind_direction_10m", 270.0))
+            self.humidity = int(c.get("relative_humidity_2m", 85))
 
-            w_code = cur.get("weather_code", 0)
-            self.weather_condition_str = WMO_WEATHER_CODES.get(w_code, "Zmienne")
-
-            w_spd = cur.get("wind_speed_10m", 0.0)
-            w_dir = cur.get("wind_direction_10m", 270.0)
-            self.wind_str = f"{w_spd:.1f} km/h z {_deg_to_cardinal(w_dir)}"
-
-            if w_code in (95, 96, 99):
-                self.storm_risk_str = "WYSOKIE (Burza z wyładowaniami!)"
-            elif precip > 2.0:
-                self.storm_risk_str = "Średnie (Opad umiarkowany)"
-            else:
-                self.storm_risk_str = "Niskie (Brak aktywnych burz)"
-
-            raw_time = cur.get("time", "")
-            if "T" in raw_time:
-                self.last_update_time_str = raw_time.split("T")[1]
-            else:
-                self.last_update_time_str = time.strftime("%H:%M")
-
+            raw_time = str(c.get("time", ""))
+            self.station_time_str = raw_time.split("T")[1] if "T" in raw_time else time.strftime("%H:%M")
             self.is_live = True
-            self.live_status_msg = f"LIVE: Stacja Gorzów ({self.last_update_time_str})"
 
-            # If real precipitation is falling, amplify radar cloud over the area
-            if precip > 0.0:
-                calc_dbz = min(60, int(20 + precip * 8))
-                self.clusters[0]["base_lon"] = 15.2
-                self.clusters[0]["base_lat"] = 52.7
-                self.clusters[0]["dbz"] = calc_dbz
-
-        # 2. RainViewer / POLRAD Live Timestamps
-        url_rv = "https://api.rainviewer.com/public/weather-maps.json"
-        data_rv = _fetch_url_json(url_rv, timeout=4)
-        if data_rv and "radar" in data_rv and "past" in data_rv["radar"]:
-            past = data_rv["radar"]["past"]
-            if len(past) >= 8:
-                new_labels = []
-                for p in past[-8:]:
-                    ts = p.get("time", 0)
-                    try:
-                        # Convert UTC to Warsaw (+1h or +2h)
-                        dt = datetime.datetime.fromtimestamp(ts, datetime.timezone(datetime.timedelta(hours=1)))
-                        new_labels.append(dt.strftime("%H:%M"))
-                    except Exception:
-                        pass
-                if len(new_labels) == 8:
-                    new_labels[-1] += " (TERAZ)"
-                    self.frame_labels = new_labels
-
-    def _f(self, base_size: int, bold: bool = False):
-        multipliers = [1.0, 1.35, 1.7]
-        m = multipliers[self.font_scale_idx]
-        return get_font(max(10, int(base_size * m)), bold=bold)
+        # Classify precipitation state
+        self.is_raining = self.precip_val > 0.0 or self.weather_code in (51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99)
+        self.is_snowing = self.weather_code in (71, 73, 75, 77, 85, 86)
+        self.is_storm = self.weather_code in (95, 96, 99)
 
     def get_hotkey_hints(self):
-        play_txt = "Pauza" if self.is_animating else "Graj"
-        mode_txt = "Podział" if self.fullscreen_radar else "Pełny Radar"
-        font_txt = ["12pt", "16pt", "20pt"][self.font_scale_idx]
+        v_next = "Radar RPG" if self.view_mode == 0 else "Ulica 2D"
         return [
-            ("L1/R1", f"Zoom {self.zoom_level:.1f}x"),
-            ("D-Pad", "Przesuń" if self.zoom_level > 1.0 else f"Klatka: {self.frame_labels[self.frame_idx]}"),
-            ("A", play_txt),
-            ("B", "Reset Zoom"),
-            ("X", f"Ekran: {mode_txt}"),
-            ("Y", f"Czcionka: {font_txt}")
+            ("X", f"Zmień widok ({v_next})"),
+            ("A", "Pauza" if self.is_animating else "Graj"),
+            ("SELECT", "Odśwież LIVE"),
+            ("L1/R1", "Zoom (Mapa RPG)"),
+            ("D-Pad", "Przesuń mapę" if self.view_mode == 1 else "Spójrz")
         ]
 
     def update(self, dt: float):
-        # Frame animation
-        if self.is_animating:
-            self.anim_timer += dt
-            if self.anim_timer >= self.frame_duration:
-                self.anim_timer = 0.0
-                self.frame_idx = (self.frame_idx + 1) % self.total_frames
-
-        # Auto-refresh live weather data every 5 minutes (300 sec)
-        self.auto_refresh_timer += dt
-        if self.auto_refresh_timer >= 300.0:
-            self.auto_refresh_timer = 0.0
-            self._refresh_live_data()
-
-    def _geo_to_map(self, lon: float, lat: float, mw: int, mh: int) -> Tuple[int, int]:
-        center_lon = 15.5
-        center_lat = 52.65
-        lon_span = MAP_BOUNDS["lon_max"] - MAP_BOUNDS["lon_min"]
-        lat_span = MAP_BOUNDS["lat_max"] - MAP_BOUNDS["lat_min"]
-
-        d_x = (lon - center_lon) / lon_span
-        d_y = (center_lat - lat) / lat_span
-
-        cx = mw // 2 + self.pan_x
-        cy = mh // 2 + self.pan_y
-
-        px = cx + int(d_x * mw * self.zoom_level)
-        py = cy + int(d_y * mh * self.zoom_level)
-        return px, py
-
-    def render(self, canvas):
-        if self.fullscreen_radar:
-            card_x = 32
-            card_y = 66
-            card_w = 960
-            card_h = 634
-            mw = card_w - 32
-            mh = 500
-        else:
-            card_x = 32
-            card_y = 66
-            card_w = 630
-            card_h = 634
-            mw = card_w - 32
-            mh = 500
-
-        # Subtitle with live status
-        live_tag = f"🟢 {self.live_status_msg}" if self.is_live else "⚪ TRYB OFFLINE (Model regionalny)"
-        sub = f"Klatka: {self.frame_labels[self.frame_idx]}  |  {live_tag}  |  Zoom: {self.zoom_level:.1f}x"
-        canvas.draw_card(
-            card_x, card_y, card_w, card_h,
-            title="RADAR BURZ I OPADÓW (POLRAD / RAINVIEWER)",
-            subtitle=sub,
-            border_color=self.accent_color
-        )
-
-        mx = card_x + 16
-        my = card_y + 52
-
-        # Draw Map to clipped Image layer to prevent overspill
-        map_img = Image.new("RGBA", (mw, mh), (12, 16, 24, 255))
-        mdraw = ImageDraw.Draw(map_img)
-
-        # Coordinate Grid
-        grid_step = max(30, int(60 * self.zoom_level))
-        start_x = (mw // 2 + self.pan_x) % grid_step
-        start_y = (mh // 2 + self.pan_y) % grid_step
-        for gx in range(start_x, mw, grid_step):
-            mdraw.line([(gx, 0), (gx, mh)], fill=(20, 28, 42, 255), width=1)
-        for gy in range(start_y, mh, grid_step):
-            mdraw.line([(0, gy), (mw, gy)], fill=(20, 28, 42, 255), width=1)
-
-        # Draw Border PL-DE
-        b_pts = [self._geo_to_map(lon, lat, mw, mh) for lon, lat in BORDER_PL_DE]
-        for i in range(len(b_pts) - 1):
-            mdraw.line([b_pts[i], b_pts[i + 1]], fill=(100, 90, 130, 255), width=2)
-
-        # Draw Odra River
-        odra_pts = [self._geo_to_map(lon, lat, mw, mh) for lon, lat in RIVER_ODRA]
-        for i in range(len(odra_pts) - 1):
-            mdraw.line([odra_pts[i], odra_pts[i + 1]], fill=(16, 80, 130, 255), width=max(3, int(4 * self.zoom_level)))
-            mdraw.line([odra_pts[i], odra_pts[i + 1]], fill=(30, 144, 255, 255), width=max(1, int(2 * self.zoom_level)))
-
-        # Draw Warta River
-        warta_pts = [self._geo_to_map(lon, lat, mw, mh) for lon, lat in RIVER_WARTA]
-        for i in range(len(warta_pts) - 1):
-            mdraw.line([warta_pts[i], warta_pts[i + 1]], fill=(16, 80, 130, 255), width=max(3, int(4 * self.zoom_level)))
-            mdraw.line([warta_pts[i], warta_pts[i + 1]], fill=(30, 144, 255, 255), width=max(1, int(2 * self.zoom_level)))
-
-        # Rain Clouds / Radar Clusters (Wind movement from West-Northwest)
-        cloud_offset_lon = (self.frame_idx - 7) * 0.08
-        cloud_offset_lat = (self.frame_idx - 7) * -0.02
-
-        for cl in self.clusters:
-            c_lon = cl["base_lon"] + cloud_offset_lon
-            c_lat = cl["base_lat"] + cloud_offset_lat
-            c_px, c_py = self._geo_to_map(c_lon, c_lat, mw, mh)
-
-            dbz = cl["dbz"]
-            for ring_step, color, _ in DBZ_LEVELS:
-                if ring_step <= dbz:
-                    factor = 1.0 - (ring_step / 70.0)
-                    rx = int(cl["radius_lon"] * (mw / 4.0) * factor * self.zoom_level)
-                    ry = int(cl["radius_lat"] * (mh / 2.3) * factor * self.zoom_level)
-                    if rx > 4 and ry > 4:
-                        mdraw.ellipse([(c_px - rx, c_py - ry), (c_px + rx, c_py + ry)], outline=color + (255,), width=2)
-                        if ring_step >= dbz - 10:
-                            mdraw.ellipse([(c_px - rx + 2, c_py - ry + 2), (c_px + rx - 2, c_py + ry - 2)], fill=color + (140,))
-
-        # Cities & Towns
-        city_font = self._f(11, bold=True)
-        for c_name, c_lon, c_lat, is_target in CITIES:
-            cx, cy = self._geo_to_map(c_lon, c_lat, mw, mh)
-            if -50 <= cx <= mw + 50 and -20 <= cy <= mh + 20:
-                dot_col = (255, 170, 0, 255) if is_target else (140, 160, 190, 255)
-                r = 6 if is_target else 4
-                mdraw.ellipse([(cx - r, cy - r), (cx + r, cy + r)], fill=dot_col)
-                if is_target:
-                    tr = max(10, int(12 * min(2.0, self.zoom_level)))
-                    mdraw.ellipse([(cx - tr, cy - tr), (cx + tr, cy + tr)], outline=(255, 170, 0, 255), width=2)
-                # Label
-                text_col = (255, 255, 255, 255) if is_target else (170, 190, 215, 255)
-                mdraw.text((cx + 10, cy - 8), c_name, fill=text_col, font=city_font)
-
-        # On-Map HUD Badge (Zoom, Pan, Frame)
-        hud_txt = f"🔍 ZOOM {self.zoom_level:.1f}x [L1/R1]  |  [B] Reset  |  [Y] Czcionka  |  [X] {'Podział' if self.fullscreen_radar else 'Pełny Ekran'}"
-        mdraw.rounded_rectangle([(10, 10), (mw - 10, 36)], radius=6, fill=(10, 14, 22, 220), outline=(0, 240, 255, 180), width=1)
-        mdraw.text((18, 14), hud_txt, fill=(0, 240, 255, 255), font=self._f(11, bold=True))
-
-        # Paste map layer onto canvas
-        canvas.image.paste(map_img, (mx, my), map_img)
-
-        # Map Viewport Border
-        canvas.draw.rectangle([(mx, my), (mx + mw, my + mh)], outline=COLOR_BORDER, width=2)
-
-        # Bottom Timeline Bar under map
-        t_y = my + mh + 12
-        step_w = mw // self.total_frames
-        for f_i in range(self.total_frames):
-            is_cur = (f_i == self.frame_idx)
-            is_now = (f_i == self.total_frames - 1)
-            tx = mx + f_i * step_w
-            pill_col = COLOR_ELECTRIC_BLUE if is_cur else ((28, 42, 58) if is_now else (18, 22, 30))
-            out_col = COLOR_CYBER_CYAN if is_cur else COLOR_BORDER
-
-            canvas.draw.rounded_rectangle([(tx + 2, t_y), (tx + step_w - 4, t_y + 36)], radius=6, fill=pill_col, outline=out_col)
-            lbl = self.frame_labels[f_i]
-            canvas.draw.text((tx + 6, t_y + 8), lbl, fill=COLOR_TEXT_PRIMARY if is_cur else COLOR_TEXT_SECONDARY, font=self._f(11, bold=is_cur))
-
-        # ----------------------------------------------------------------------
-        # If Fullscreen: Mini Floating Gorzów Telemetry
-        # ----------------------------------------------------------------------
-        if self.fullscreen_radar:
-            fx = mx + mw - 350
-            fy = my + 46
-            canvas.draw.rounded_rectangle([(fx, fy), (fx + 340, fy + 175)], radius=8, fill=(14, 20, 30), outline=COLOR_CYBER_CYAN, width=2)
-            canvas.draw.text((fx + 14, fy + 10), "GORZÓW WLKP. (LIVE STACJA)", fill=COLOR_CYBER_CYAN, font=self._f(13, bold=True))
-            canvas.draw.line([(fx + 14, fy + 32), (fx + 326, fy + 32)], fill=COLOR_BORDER, width=1)
-            canvas.draw.text((fx + 14, fy + 40), f"Stan: {self.weather_condition_str}", fill=COLOR_TEXT_PRIMARY, font=self._f(12, bold=True))
-            canvas.draw.text((fx + 14, fy + 68), f"Temp: {self.temp_str} (odcz. {self.apparent_temp_str})", fill=COLOR_TEXT_SECONDARY, font=self._f(11))
-            canvas.draw.text((fx + 14, fy + 94), f"Opad: {self.precipitation_str}  |  Wilg: {self.humidity_str}", fill=COLOR_TEXT_PRIMARY, font=self._f(11))
-            canvas.draw.text((fx + 14, fy + 120), f"Wiatr: {self.wind_str}", fill=COLOR_PHOSPHOR_GREEN, font=self._f(11))
-            canvas.draw.text((fx + 14, fy + 146), f"Zagrożenie: {self.storm_risk_str}", fill=COLOR_FLIPPER_AMBER, font=self._f(11, bold=True))
+        if not self.is_animating:
             return
 
-        # ----------------------------------------------------------------------
-        # Right Panel: Gorzów Live Telemetry & dBZ Legend (x=672, y=66, w=320, h=634)
-        # ----------------------------------------------------------------------
-        card_w_right = 320
-        canvas.draw_card(
-            672, 66, card_w_right, 634,
-            title="STACJA POGODOWA GORZÓW",
-            subtitle=f"Dane na żywo: {self.last_update_time_str}",
-            border_color=COLOR_BORDER
-        )
+        self.time_counter += dt
+        self.breath_phase = math.sin(self.time_counter * 3.0)
 
-        rx = 688
-        ry = 118
-        rw = card_w_right - 32
+        # Eye blink logic (blinks for 0.2s every 4 seconds)
+        cycle = self.time_counter % 4.0
+        self.eye_blink = 1.0 if cycle > 3.8 else 0.0
 
-        # Gorzów Live Alert Box
-        canvas.draw.rounded_rectangle([(rx, ry), (rx + rw, ry + 195)], radius=8, fill=(22, 28, 38), outline=COLOR_CYBER_CYAN, width=1)
-        canvas.draw.text((rx + 14, ry + 10), "TELEMETRIA METEO (LIVE)", fill=COLOR_CYBER_CYAN, font=self._f(13, bold=True))
-        canvas.draw.line([(rx + 14, ry + 32), (rx + rw - 14, ry + 32)], fill=COLOR_BORDER, width=1)
+        # Random lightning during storm
+        if self.is_storm and random.random() < 0.015:
+            self.lightning_flash = 0.15
+        elif self.lightning_flash > 0:
+            self.lightning_flash = max(0.0, self.lightning_flash - dt)
 
-        summary_rows = [
-            ("Stan bieżący:", self.weather_condition_str),
-            ("Temperatura:", f"{self.temp_str} (odcz. {self.apparent_temp_str})"),
-            ("Intensywność opadów:", f"{self.precipitation_str}"),
-            ("Wiatr przyziemny:", self.wind_str),
-            ("Wilgotność względna:", f"{self.humidity_str}"),
-            ("Zagrożenie burzowe:", self.storm_risk_str)
+        # Update clouds
+        for cl in self.clouds:
+            cl["x"] += cl["speed"] * dt
+            if cl["x"] > 1100:
+                cl["x"] = -160
+
+        # Update falling rain/snow particles
+        wind_offset = (self.wind_speed * 4.0) * dt
+        if self.is_raining or self.is_snowing or True: # always show ambient droplets or night mist
+            for p in self.particles:
+                p["y"] += p["speed"] * dt
+                p["x"] += wind_offset
+                if p["x"] > 1050: p["x"] = -20
+                if p["x"] < -30: p["x"] = 1040
+
+                # Splash on hero umbrella (umbrella x: 440..560, y: 350) or ground (y: 520)
+                if 440 <= p["x"] <= 560 and 345 <= p["y"] <= 360 and (self.is_raining or True):
+                    self.splashes.append({"x": p["x"], "y": 348, "life": 0.15})
+                    p["y"] = -10
+                    p["x"] = random.randint(0, 1024)
+                elif p["y"] >= 520:
+                    if random.random() < 0.4:
+                        self.splashes.append({"x": p["x"], "y": 520, "life": 0.12})
+                    p["y"] = -10
+                    p["x"] = random.randint(0, 1024)
+
+        # Update splashes
+        for s in self.splashes:
+            s["life"] -= dt
+        self.splashes = [s for s in self.splashes if s["life"] > 0]
+
+    def _draw_pixel_matrix(self, draw: ImageDraw.ImageDraw, matrix: List[str], color_map: dict, ox: int, oy: int, scale: int = 4):
+        for r, row in enumerate(matrix):
+            for c, ch in enumerate(row):
+                col = color_map.get(ch)
+                if col:
+                    x1 = ox + c * scale
+                    y1 = oy + r * scale
+                    draw.rectangle([x1, y1, x1 + scale - 1, y1 + scale - 1], fill=col)
+
+    def _get_time_of_day(self) -> str:
+        # Determine day period: night, dawn, day, dusk
+        now_h = datetime.datetime.now().hour
+        if 6 <= now_h < 8:
+            return "dawn"
+        elif 8 <= now_h < 16:
+            return "day"
+        elif 16 <= now_h < 18:
+            return "dusk"
+        else:
+            return "night"
+
+    def render(self, canvas):
+        w, h = 1024, 768
+
+        if self.view_mode == 0:
+            self._render_street_view(canvas, w, h)
+        else:
+            self._render_rpg_map_view(canvas, w, h)
+
+    # -------------------------------------------------------------------------
+    # VIEW 1: 16-BIT RETRO STREET SCENE (GORZÓW RIVERFRONT)
+    # -------------------------------------------------------------------------
+    def _render_street_view(self, canvas, w: int, h: int):
+        draw = canvas.draw
+        tod = self._get_time_of_day()
+
+        # 1. Sky Gradient & Background
+        ground_y = 500
+        if self.lightning_flash > 0:
+            draw.rectangle([0, 0, w, ground_y], fill=(220, 235, 255))
+        elif tod == "night":
+            # Dark navy night gradient
+            for y in range(0, ground_y, 4):
+                f = y / float(ground_y)
+                r = int(PALETTE["sky_night_top"][0] * (1 - f) + PALETTE["sky_night_bot"][0] * f)
+                g = int(PALETTE["sky_night_top"][1] * (1 - f) + PALETTE["sky_night_bot"][1] * f)
+                b = int(PALETTE["sky_night_top"][2] * (1 - f) + PALETTE["sky_night_bot"][2] * f)
+                draw.rectangle([0, y, w, y + 3], fill=(r, g, b))
+
+            # Twinkling Stars
+            star_locs = [(80, 50), (190, 80), (320, 40), (460, 95), (600, 60), (740, 110), (880, 45), (960, 90), (140, 140), (820, 150)]
+            for sx, sy in star_locs:
+                if (int(self.time_counter * 3 + sx) % 3) != 0:
+                    draw.rectangle([sx, sy, sx + 3, sy + 3], fill=PALETTE["stars"])
+                    draw.rectangle([sx + 1, sy - 1, sx + 2, sy + 4], fill=(255, 255, 255, 180))
+
+            # Crescent Pixel Moon
+            mx, my, ms = 860, 60, 6
+            moon_map = [
+                "...yyyy...",
+                "..yyyyyy..",
+                ".yyykkkky.",
+                "yyyykkkkyy",
+                "yyyykkkkyy",
+                "yyyykkkkyy",
+                ".yyykkkky.",
+                "..yyyyyy..",
+                "...yyyy..."
+            ]
+            self._draw_pixel_matrix(draw, moon_map, {"y": PALETTE["moon"], "k": None}, mx, my, ms)
+
+        elif tod == "day":
+            for y in range(0, ground_y, 4):
+                f = y / float(ground_y)
+                r = int(PALETTE["sky_day_top"][0] * (1 - f) + PALETTE["sky_day_bot"][0] * f)
+                g = int(PALETTE["sky_day_top"][1] * (1 - f) + PALETTE["sky_day_bot"][1] * f)
+                b = int(PALETTE["sky_day_top"][2] * (1 - f) + PALETTE["sky_day_bot"][2] * f)
+                draw.rectangle([0, y, w, y + 3], fill=(r, g, b))
+
+            # Bright pixel sun
+            draw.rectangle([840, 50, 888, 98], fill=PALETTE["sun"])
+            draw.rectangle([832, 62, 896, 86], fill=PALETTE["sun"])
+
+        else: # dusk / dawn
+            for y in range(0, ground_y, 4):
+                f = y / float(ground_y)
+                r = int(PALETTE["sky_sunset_top"][0] * (1 - f) + PALETTE["sky_sunset_bot"][0] * f)
+                g = int(PALETTE["sky_sunset_top"][1] * (1 - f) + PALETTE["sky_sunset_bot"][1] * f)
+                b = int(PALETTE["sky_sunset_top"][2] * (1 - f) + PALETTE["sky_sunset_bot"][2] * f)
+                draw.rectangle([0, y, w, y + 3], fill=(r, g, b))
+
+        # 2. Pixel Clouds Drifting
+        c_fill = PALETTE["cloud_night"] if tod == "night" else PALETTE["cloud_day"]
+        c_shad = PALETTE["cloud_night_shadow"] if tod == "night" else PALETTE["cloud_day_shadow"]
+        for cl in self.clouds:
+            cx, cy, cs = int(cl["x"]), cl["y"], cl["scale"]
+            draw.rounded_rectangle([cx, cy, cx + 24 * cs, cy + 10 * cs], radius=8, fill=c_fill)
+            draw.rounded_rectangle([cx + 6 * cs, cy - 4 * cs, cx + 18 * cs, cy + 8 * cs], radius=8, fill=c_fill)
+            draw.rounded_rectangle([cx + 2 * cs, cy + 6 * cs, cx + 22 * cs, cy + 10 * cs], radius=4, fill=c_shad)
+
+        # 3. Silhouette of Gorzów Bridge & Skyline (Most Kolejowy w Gorzowie)
+        by = ground_y - 120
+        # Arch Bridge
+        for arch_x in range(40, 960, 220):
+            draw.rectangle([arch_x, by + 30, arch_x + 200, by + 46], fill=PALETTE["bridge_silhouette"])
+            # Arch cutout
+            draw.chord([arch_x + 20, by + 32, arch_x + 180, by + 120], 180, 360, fill=PALETTE["sky_night_bot"] if tod == "night" else PALETTE["sky_day_bot"])
+            # Bridge Pillars
+            draw.rectangle([arch_x + 190, by + 30, arch_x + 210, by + 80], fill=PALETTE["bridge_silhouette"])
+            # Warm bridge light
+            if tod == "night":
+                draw.rectangle([arch_x + 95, by + 24, arch_x + 105, by + 30], fill=PALETTE["bridge_lights"])
+
+        # Cathedral Tower Silhouette
+        draw.rectangle([680, by - 60, 720, by + 40], fill=PALETTE["bridge_silhouette"])
+        draw.polygon([(676, by - 60), (700, by - 120), (724, by - 60)], fill=PALETTE["bridge_silhouette"])
+        if tod == "night":
+            draw.rectangle([696, by - 30, 704, by - 20], fill=PALETTE["bridge_lights"])
+
+        # 4. River Warta Water Strip (y: 410 to 480)
+        draw.rectangle([0, ground_y - 70, w, ground_y], fill=PALETTE["water_deep"])
+        wave_shift = int(self.time_counter * 30) % 40
+        for wy in range(ground_y - 60, ground_y - 10, 14):
+            for wx in range(-40 + wave_shift, w + 40, 50):
+                draw.rectangle([wx, wy, wx + 20, wy + 2], fill=PALETTE["water_wave"])
+
+        # 5. Pavement Boulevard & Cobblestone (y: 480 to 768)
+        draw.rectangle([0, ground_y, w, 768], fill=PALETTE["pavement_dark"])
+        draw.rectangle([0, ground_y, w, ground_y + 8], fill=PALETTE["curb"])
+        # Cobblestone pattern
+        for py in range(ground_y + 16, 540, 16):
+            shift = 14 if (py // 16) % 2 == 0 else 0
+            for px in range(shift, w, 28):
+                draw.rectangle([px, py, px + 24, py + 12], fill=PALETTE["pavement_light"], outline=PALETTE["pavement_dark"])
+
+        # 6. Street Lamp on Left (x: 260) with Light Cone
+        lx = 260
+        ly = ground_y - 144
+        if tod == "night":
+            # Semi-transparent yellow light cone
+            glow_surf = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+            gdraw = ImageDraw.Draw(glow_surf)
+            gdraw.polygon([(lx + 16, ly + 28), (lx - 120, ground_y + 30), (lx + 160, ground_y + 30)], fill=(255, 230, 120, 45))
+            canvas.image.paste(glow_surf, (0, 0), glow_surf)
+
+        lamp_pal = {"k": PALETTE["k"], "y": PALETTE["lamp_glow"], "w": (255, 255, 220), "s": PALETTE["lamp_post"]}
+        self._draw_pixel_matrix(draw, STREET_LAMP, lamp_pal, lx, ly, scale=4)
+
+        # 7. Hero Character in Center (x: 480, y: 380)
+        hx = 480
+        hy = ground_y - 105 + int(self.breath_phase * 2)
+
+        hero_pal = {
+            "k": PALETTE["k"],
+            "s": PALETTE["skin"] if self.eye_blink == 0 else PALETTE["skin_shad"],
+            "f": PALETTE["skin"],
+            "y": PALETTE["scarf"],
+            "c": PALETTE["coat_red"],
+            "p": PALETTE["pants"],
+            "b": PALETTE["boots"]
+        }
+        self._draw_pixel_matrix(draw, HERO_BODY, hero_pal, hx, hy, scale=5)
+
+        # Umbrella (Open if raining, Closed if dry)
+        if self.is_raining or True: # Show cool open umbrella
+            ux = hx - 26
+            uy = hy - 46
+            umb_pal = {
+                "k": PALETTE["k"],
+                "r": PALETTE["umbrella_red"],
+                "y": PALETTE["umbrella_yellow"],
+                ".": None
+            }
+            self._draw_pixel_matrix(draw, UMBRELLA_OPEN, umb_pal, ux, uy, scale=5)
+            # Umbrella staff connecting to hero hand
+            draw.rectangle([hx + 30, hy + 2, hx + 34, hy + 42], fill=PALETTE["k"])
+            draw.rectangle([hx + 28, hy + 40, hx + 36, hy + 48], fill=PALETTE["umbrella_yellow"])
+        else:
+            # Closed umbrella resting on shoulder
+            umb_pal = {"k": PALETTE["k"], "r": PALETTE["umbrella_red"], "y": PALETTE["umbrella_yellow"], ".": None}
+            self._draw_pixel_matrix(draw, UMBRELLA_CLOSED, umb_pal, hx + 48, hy + 10, scale=4)
+
+        # 8. Falling Rain & Splashes
+        wind_slant = int(self.wind_speed * 0.8)
+        for p in self.particles:
+            px, py = int(p["x"]), int(p["y"])
+            plen = p["len"]
+            draw.line([(px, py), (px + wind_slant, py + plen)], fill=PALETTE["rain_drop"], width=2)
+
+        for s in self.splashes:
+            sx, sy = int(s["x"]), int(s["y"])
+            draw.rectangle([sx - 2, sy - 2, sx + 2, sy], fill=PALETTE["splash"])
+            draw.rectangle([sx - 4, sy - 4, sx - 2, sy - 2], fill=PALETTE["splash"])
+            draw.rectangle([sx + 2, sy - 4, sx + 4, sy - 2], fill=PALETTE["splash"])
+
+        # 9. 16-Bit JRPG Quest & Weather Dialog Box (y: 536 to 746)
+        self._render_jrpg_dialog_box(draw, w, h)
+
+    # -------------------------------------------------------------------------
+    # VIEW 2: TOP-DOWN 16-BIT RPG OVERWORLD MAP (ADVANCE WARS / ZELDA SNES)
+    # -------------------------------------------------------------------------
+    def _render_rpg_map_view(self, canvas, w: int, h: int):
+        draw = canvas.draw
+        # 1. Dark Vintage RPG Map Background (Tiles)
+        draw.rectangle([0, 0, w, h], fill=(24, 48, 32)) # Deep forest green grass
+
+        # Checkerboard grass tiles
+        for ty in range(0, 530, 32):
+            for tx in range(0, w, 32):
+                if ((tx + ty) // 32) % 2 == 0:
+                    draw.rectangle([tx, ty, tx + 31, ty + 31], fill=(28, 56, 36))
+
+        # 2. Warta & Odra Rivers (Animated Blue Water Ribbon)
+        # Odra River (Border North-South)
+        odra_nodes = [(320, 20), (310, 110), (280, 210), (260, 310), (240, 420), (250, 520)]
+        for i in range(len(odra_nodes) - 1):
+            draw.line([odra_nodes[i], odra_nodes[i + 1]], fill=(14, 80, 150), width=18)
+            draw.line([odra_nodes[i], odra_nodes[i + 1]], fill=(40, 140, 230), width=10)
+
+        # Warta River (Joining Odra near Kostrzyn, flowing East past Gorzów)
+        warta_nodes = [(860, 340), (740, 320), (520, 260), (380, 240), (280, 210)]
+        for i in range(len(warta_nodes) - 1):
+            draw.line([warta_nodes[i], warta_nodes[i + 1]], fill=(14, 80, 150), width=16)
+            draw.line([warta_nodes[i], warta_nodes[i + 1]], fill=(40, 140, 230), width=8)
+
+        # 3. Towns & Castles
+        cities_map = [
+            ("GORZÓW WLKP. (BAZA)", 510, 240, True),
+            ("Szczecin (Port)", 270, 70, False),
+            ("Poznań (Twierdza)", 760, 330, False),
+            ("Zielona Góra", 380, 430, False),
+            ("Kostrzyn n/O.", 260, 200, False),
+            ("Berlin", 80, 220, False)
         ]
-        s_y = ry + 38
-        for lbl, val in summary_rows:
-            canvas.draw.text((rx + 12, s_y), lbl, fill=COLOR_TEXT_SECONDARY, font=self._f(10, bold=False))
-            canvas.draw.text((rx + 12, s_y + 14), val, fill=COLOR_TEXT_PRIMARY, font=self._f(11, bold=True))
-            s_y += 26
 
-        # Radar Reflectivity dBZ Legend
-        leg_box_y = ry + 208
-        canvas.draw.rounded_rectangle([(rx, leg_box_y), (rx + rw, leg_box_y + 288)], radius=8, fill=(18, 22, 30), outline=COLOR_BORDER)
-        canvas.draw.text((rx + 14, leg_box_y + 10), "SKALA ODBICIOWOŚCI dBZ", fill=COLOR_CYBER_CYAN, font=self._f(12, bold=True))
-        canvas.draw.line([(rx + 14, leg_box_y + 30), (rx + rw - 14, leg_box_y + 30)], fill=COLOR_BORDER, width=1)
+        town_pal = {
+            "k": (10, 15, 20),
+            "w": (220, 225, 235),
+            "r": (225, 50, 50),
+            ".": None
+        }
 
-        leg_y = leg_box_y + 38
-        for dbz_val, col, desc in DBZ_LEVELS:
-            canvas.draw.rectangle([(rx + 14, leg_y), (rx + 44, leg_y + 22)], fill=col, outline=COLOR_BORDER)
-            canvas.draw.text((rx + 16, leg_y + 3), f"{dbz_val}", fill=(0, 0, 0) if dbz_val in (25, 35) else (255, 255, 255), font=self._f(11, bold=True))
-            canvas.draw.text((rx + 54, leg_y + 3), desc, fill=COLOR_TEXT_PRIMARY, font=self._f(10, bold=False))
-            leg_y += 32
+        for c_name, cx, cy, is_hero in cities_map:
+            # Draw castle sprite
+            self._draw_pixel_matrix(draw, CASTLE_TOWN, town_pal, cx - 24, cy - 24, scale=3)
+            # Town label badge
+            col_box = (20, 30, 45, 230)
+            draw.rounded_rectangle([cx - 45, cy + 28, cx + 110, cy + 48], radius=4, fill=col_box, outline=(255, 210, 40) if is_hero else (60, 85, 120))
+            draw.text((cx - 38, cy + 32), c_name, fill=(255, 220, 60) if is_hero else (220, 230, 245), font=get_font(11, bold=is_hero))
+
+            if is_hero:
+                # Hero mini pin
+                draw.rectangle([cx - 6, cy - 36, cx + 6, cy - 24], fill=(255, 50, 60), outline=(255, 255, 255))
+                draw.text((cx - 16, cy - 54), "TY TUTAJ", fill=(255, 255, 255), font=get_font(10, bold=True))
+
+        # 4. Drifting Rain Radar Clouds on RPG Map
+        cloud_x = int(self.time_counter * 25) % 1100 - 100
+        # Draw pixel storm cloud
+        draw.rounded_rectangle([cloud_x, 150, cloud_x + 220, 260], radius=16, fill=(35, 50, 75, 210), outline=(0, 240, 255))
+        draw.text((cloud_x + 20, 165), "CHMURA OPADOWA (FRONT ZACHODNI)", fill=(0, 240, 255), font=get_font(10, bold=True))
+        # Rain streaks underneath the cloud
+        for rx in range(cloud_x + 15, cloud_x + 205, 14):
+            draw.line([(rx, 262), (rx - 6, 310)], fill=(80, 180, 255), width=2)
+
+        # 5. Overworld HUD & Dialog Box
+        self._render_jrpg_dialog_box(draw, w, h, map_mode=True)
+
+    # -------------------------------------------------------------------------
+    # 16-BIT JRPG DIALOG / BATTLE BOX TELEMETRY
+    # -------------------------------------------------------------------------
+    def _render_jrpg_dialog_box(self, draw: ImageDraw.ImageDraw, w: int, h: int, map_mode: bool = False):
+        bx = 28
+        by = 524
+        bw = w - 56
+        bh = 224
+
+        # Classical JRPG double border (Deep royal blue background with gold/white pixel borders)
+        draw.rounded_rectangle([bx, by, bx + bw, by + bh], radius=12, fill=(12, 18, 34), outline=(255, 210, 60), width=3)
+        draw.rounded_rectangle([bx + 6, by + 6, bx + bw - 6, by + bh - 6], radius=8, fill=(16, 26, 48), outline=(255, 255, 255), width=1)
+
+        # Header Title Bar
+        live_str = f"🟢 LIVE (STACJA GORZÓW {self.station_time_str})" if self.is_live else "⚪ TRYB OFFLINE (SYMULATOR)"
+        mode_str = "🗺️ STRATEGICZNA MAPA ŚWIATA [WIDOK Z GÓRY]" if map_mode else "🏙️ BULWAR NAD WARTĄ [WIDOK Z BOKU 2D]"
+
+        draw.text((bx + 20, by + 14), f"⚔️ {mode_str}", fill=(255, 220, 60), font=get_font(14, bold=True))
+        draw.text((bx + bw - 320, by + 16), live_str, fill=(0, 255, 180) if self.is_live else (160, 180, 200), font=get_font(12, bold=True))
+        draw.line([(bx + 16, by + 40), (bx + bw - 16, by + 40)], fill=(60, 85, 120), width=2)
+
+        # Left Column: RPG Stats Gauges (HP/MP style)
+        col1_x = bx + 22
+        sy = by + 50
+
+        # Stat 1: Temperatura
+        temp_color = (80, 190, 255) if self.temp_val < 5 else (255, 170, 0)
+        draw.text((col1_x, sy), f"TEMPERATURA :", fill=(180, 205, 235), font=get_font(12, bold=True))
+        draw.text((col1_x + 130, sy), f"{self.temp_val:+.1f}°C  (Odczuwalna: {self.temp_apparent:+.1f}°C)", fill=temp_color, font=get_font(13, bold=True))
+
+        # Stat 2: Pogoda / Warunki
+        draw.text((col1_x, sy + 28), f"STAN POGODY :", fill=(180, 205, 235), font=get_font(12, bold=True))
+        cond_icon = "🌧️" if self.is_raining else ("❄️" if self.is_snowing else "☁️")
+        draw.text((col1_x + 130, sy + 28), f"{cond_icon} {self.weather_name.upper()}", fill=(255, 255, 255), font=get_font(13, bold=True))
+
+        # Stat 3: Opady / Deszcz
+        draw.text((col1_x, sy + 56), f"OPAD DESZCZU:", fill=(180, 205, 235), font=get_font(12, bold=True))
+        precip_txt = f"{self.precip_val:.1f} mm/h (Wykryto opad!)" if self.is_raining else "0.0 mm/h (Brak deszczu)"
+        draw.text((col1_x + 130, sy + 56), precip_txt, fill=(0, 240, 255) if self.is_raining else (140, 160, 180), font=get_font(13, bold=True))
+
+        # Stat 4: Wiatr
+        w_dir = _deg_to_compass(self.wind_dir_deg)
+        draw.text((col1_x, sy + 84), f"WIATR PRZY ZIEMI:", fill=(180, 205, 235), font=get_font(12, bold=True))
+        draw.text((col1_x + 130, sy + 84), f"💨 {self.wind_speed:.1f} km/h z kierunku {w_dir} ({self.wind_dir_deg:.0f}°)", fill=(0, 255, 180), font=get_font(13, bold=True))
+
+        # Right Column: Hero Quest Dialogue & Advice
+        col2_x = bx + 540
+        draw.line([(col2_x - 16, by + 46), (col2_x - 16, by + bh - 16)], fill=(40, 60, 85), width=1)
+
+        draw.text((col2_x, by + 50), "📜 KOMUNIKAT POSTACI:", fill=(255, 210, 60), font=get_font(12, bold=True))
+
+        # Dialogue text depending on weather
+        if self.is_storm:
+            dialogue = "„Uwaga! Zbliża się burza z piorunami! Schowaj się pod zadaszeniem!”"
+            umbrella_state = "Parasol: OTWARTY (Ochrona przed burzą)"
+        elif self.is_raining:
+            dialogue = "„Pada deszcz! Trzymam parasol, krople rozbryzgują się o chodnik.”"
+            umbrella_state = "Parasol: OTWARTY (Pikselowe rozbryzgi aktywne)"
+        elif self.is_snowing:
+            dialogue = "„Leci śnieg! Płatki powoli opadają na bulwary Gorzowa.”"
+            umbrella_state = "Parasol: ZŁOŻONY (Cieszę się śniegiem)"
+        elif self._get_time_of_day() == "night":
+            dialogue = "„Spokojna, chłodna noc w Gorzowie. Latarnie świecą, deszcz nie pada.”"
+            umbrella_state = "Parasol: ZŁOŻONY (Gorąca kawa w dłoni)"
+        else:
+            dialogue = "„Dzień jest spokojny. Przyjemny spacer wzdłuż Warty.”"
+            umbrella_state = "Parasol: ZŁOŻONY (Czyste niebo)"
+
+        draw.text((col2_x, by + 74), dialogue, fill=(240, 245, 255), font=get_font(12, bold=False))
+        draw.text((col2_x, by + 102), f"🌂 Status: {umbrella_state}", fill=(0, 240, 255), font=get_font(11, bold=True))
+
+        # Hotkeys hint bar at bottom
+        draw.line([(bx + 16, by + bh - 42), (bx + bw - 16, by + bh - 42)], fill=(40, 60, 85), width=1)
+        btn_hint = "[X] ZMIEŃ WIDOK NA RADAR/ULICĘ   |   [A] ZATRZYMAJ ANIMACJĘ   |   [SELECT] ODŚWIEŻ STACJĘ METEO   |   [L1/R1] ZOOM"
+        draw.text((bx + 20, by + bh - 32), btn_hint, fill=(255, 210, 60), font=get_font(11, bold=True))
 
     def handle_input(self, event: str) -> bool:
         ev = str(event).upper()
@@ -487,52 +758,37 @@ class RainRadarModule(BaseModule):
         elif ev.startswith("BTN_"):
             ev = ev[4:]
 
-        if ev in ("L1", "BUMPER_LEFT", "ZOOM_OUT", "Q", "MINUS"):
-            self.zoom_level = max(1.0, round(self.zoom_level - 0.5, 1))
-            if self.zoom_level == 1.0:
-                self.pan_x = 0
-                self.pan_y = 0
+        if ev in ("X", "BTN_X", "U"):
+            # Toggle between 2D Street View and RPG Overworld Radar Map
+            self.view_mode = (self.view_mode + 1) % 2
             return True
-        elif ev in ("R1", "BUMPER_RIGHT", "ZOOM_IN", "E", "PLUS"):
-            self.zoom_level = min(4.0, round(self.zoom_level + 0.5, 1))
-            return True
-        elif ev in ("Y", "BTN_Y", "I"):
-            self.font_scale_idx = (self.font_scale_idx + 1) % len(self.font_scale_labels)
-            return True
-        elif ev in ("X", "BTN_X", "U"):
-            self.fullscreen_radar = not self.fullscreen_radar
+        elif ev in ("A", "BTN_A", "SPACE", "RETURN", "J"):
+            self.is_animating = not self.is_animating
             return True
         elif ev in ("SELECT", "REFRESH", "R"):
             self._refresh_live_data()
             return True
-        elif ev in ("B", "BTN_B", "K", "ESCAPE"):
-            self.zoom_level = 1.0
-            self.pan_x = 0
-            self.pan_y = 0
+        elif ev in ("L1", "BUMPER_LEFT", "ZOOM_OUT", "Q"):
+            self.map_zoom = max(1.0, self.map_zoom - 0.5)
             return True
-        elif ev in ("A", "BTN_A", "J", "SPACE", "RETURN"):
-            self.is_animating = not self.is_animating
+        elif ev in ("R1", "BUMPER_RIGHT", "ZOOM_IN", "E"):
+            self.map_zoom = min(3.0, self.map_zoom + 0.5)
             return True
         elif ev in ("LEFT", "A_KEY", "DPAD_LEFT"):
-            if self.zoom_level > 1.0:
-                self.pan_x += 50
-            else:
-                self.frame_idx = (self.frame_idx - 1) % self.total_frames
-                self.is_animating = False
+            self.map_pan_x += 40
             return True
         elif ev in ("RIGHT", "D_KEY", "DPAD_RIGHT"):
-            if self.zoom_level > 1.0:
-                self.pan_x -= 50
-            else:
-                self.frame_idx = (self.frame_idx + 1) % self.total_frames
-                self.is_animating = False
+            self.map_pan_x -= 40
             return True
         elif ev in ("UP", "W_KEY", "DPAD_UP"):
-            if self.zoom_level > 1.0:
-                self.pan_y += 50
+            self.map_pan_y += 40
             return True
         elif ev in ("DOWN", "S_KEY", "DPAD_DOWN"):
-            if self.zoom_level > 1.0:
-                self.pan_y -= 50
+            self.map_pan_y -= 40
+            return True
+        elif ev in ("B", "BTN_B", "ESCAPE", "K"):
+            self.map_zoom = 1.0
+            self.map_pan_x = 0
+            self.map_pan_y = 0
             return True
         return False

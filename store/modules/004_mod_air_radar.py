@@ -406,7 +406,7 @@ class AirRadarModule(BaseModule):
         self.status_msg = f"LIVE RADAR: {len(self.flights)} maszyn w zasięgu"
 
     def _tile_loader_worker(self):
-        """Asynchronously preloads high-resolution map tiles for current location and zoom."""
+        """Asynchronously preloads high-resolution map tiles on native Linux / TrimUI Brick."""
         while self.thread_running:
             mode = self.map_modes[self.map_mode_idx]
             if mode != "CYBER":
@@ -417,6 +417,43 @@ class AirRadarModule(BaseModule):
                         self.current_viewport_map = map_img
                         self.last_map_key = cur_key
             time.sleep(1.5)
+
+    def get_missing_tiles(self) -> List[Tuple[str, int, int, int]]:
+        """Returns list of (mode, z, x, y) tiles needed for current viewport (used by WASM JS fetcher)."""
+        mode = self.map_modes[self.map_mode_idx]
+        if mode == "CYBER":
+            return []
+
+        zoom_map = [4, 6, 7, 8, 9, 10]
+        z = zoom_map[min(self.zoom_idx, len(zoom_map) - 1)]
+
+        lat_rad = math.radians(self.obs_lat)
+        n = 2.0 ** z
+        cx_tile = (self.obs_lon + 180.0) / 360.0 * n
+        cy_tile = (1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * n
+
+        center_tx = int(cx_tile)
+        center_ty = int(cy_tile)
+
+        missing = []
+        for dx in [-1, 0, 1]:
+            for dy in [-1, 0, 1]:
+                tx = center_tx + dx
+                ty = center_ty + dy
+                if (mode, z, tx, ty) not in self.tile_manager.mem_cache:
+                    missing.append((mode, z, tx, ty))
+        return missing
+
+    def receive_tile_bytes(self, mode: str, z: int, x: int, y: int, tile_bytes: bytes):
+        """Receives downloaded tile bytes directly from WASM JavaScript fetcher."""
+        try:
+            img = Image.open(io.BytesIO(tile_bytes)).convert("RGBA")
+            self.tile_manager.mem_cache[(mode, z, x, y)] = img
+            new_map = self.tile_manager.build_viewport_map(mode, self.obs_lat, self.obs_lon, self.zoom_idx, 602, 500)
+            if new_map:
+                self.current_viewport_map = new_map
+        except Exception:
+            pass
 
     def _fetch_live_data(self):
         """Fetch live ISS position from wheretheiss.at and ADS-B flights from OpenSky."""
@@ -653,6 +690,11 @@ class AirRadarModule(BaseModule):
         elif event in ("L2", "KEY_L2", "BTN_L2", "R2", "KEY_R2", "BTN_R2", "SELECT", "KEY_SELECT", "BTN_SELECT"):
             self.map_mode_idx = (self.map_mode_idx + 1) % len(self.map_modes)
             self.last_map_key = None
+            mode = self.map_modes[self.map_mode_idx]
+            if mode != "CYBER":
+                new_map = self.tile_manager.build_viewport_map(mode, self.obs_lat, self.obs_lon, self.zoom_idx, 602, 500)
+                if new_map:
+                    self.current_viewport_map = new_map
             return True
 
         # Open Flight Details Card via [A]
@@ -671,10 +713,20 @@ class AirRadarModule(BaseModule):
         elif event in ("BTN_X", "KEY_X", "ZOOM_IN", "WHEEL_UP"):
             if self.zoom_idx < len(self.zoom_levels) - 1:
                 self.zoom_idx += 1
+                mode = self.map_modes[self.map_mode_idx]
+                if mode != "CYBER":
+                    new_map = self.tile_manager.build_viewport_map(mode, self.obs_lat, self.obs_lon, self.zoom_idx, 602, 500)
+                    if new_map:
+                        self.current_viewport_map = new_map
                 return True
         elif event in ("BTN_Y", "KEY_Y", "ZOOM_OUT", "WHEEL_DOWN"):
             if self.zoom_idx > 0:
                 self.zoom_idx -= 1
+                mode = self.map_modes[self.map_mode_idx]
+                if mode != "CYBER":
+                    new_map = self.tile_manager.build_viewport_map(mode, self.obs_lat, self.obs_lon, self.zoom_idx, 602, 500)
+                    if new_map:
+                        self.current_viewport_map = new_map
                 return True
 
         # D-Pad Controls:

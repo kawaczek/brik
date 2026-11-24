@@ -1110,6 +1110,9 @@ py_canvas.image.tobytes("raw", "RGBA")
             const imgData = new ImageData(new Uint8ClampedArray(rawBytes.toJs()), 1024, 768);
             offCtx.putImageData(imgData, 0, 0);
             ctx.drawImage(offscreenCanvas, 0, 0, canvas.width, canvas.height);
+
+            // Fetch any missing map tiles for Air Radar in background
+            checkRadarTiles();
           }
         } catch (e) {
           // keep running
@@ -1119,6 +1122,64 @@ py_canvas.image.tobytes("raw", "RGBA")
       requestAnimationFrame(renderLoop);
     }
     requestAnimationFrame(renderLoop);
+
+    // High-Resolution Map Tile Fetcher for 004_mod_air_radar in WASM
+    let isFetchingTiles = false;
+    let lastTileReqTime = 0;
+    const requestedTiles = new Set();
+
+    async function checkRadarTiles() {
+      if (!isReady || isFetchingTiles) return;
+      const now = performance.now();
+      if (now - lastTileReqTime < 250) return;
+      lastTileReqTime = now;
+
+      try {
+        const missingJson = pyodide.runPython(`
+import json
+json.dumps(py_mod.get_missing_tiles() if py_mod and hasattr(py_mod, 'get_missing_tiles') else [])
+`);
+        const missing = JSON.parse(missingJson);
+        if (!missing || missing.length === 0) return;
+
+        const toFetch = missing.filter(t => !requestedTiles.has(`${t[0]}_${t[1]}_${t[2]}_${t[3]}`));
+        if (toFetch.length === 0) return;
+
+        toFetch.forEach(t => requestedTiles.add(`${t[0]}_${t[1]}_${t[2]}_${t[3]}`));
+        isFetchingTiles = true;
+
+        await Promise.all(toFetch.map(async ([mode, z, x, y]) => {
+          let url = '';
+          if (mode === 'SATELLITE') {
+            url = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}.jpg`;
+          } else if (mode === 'VOYAGER') {
+            url = `https://basemaps.cartocdn.com/rastertiles/voyager/${z}/${x}/${y}.png`;
+          } else {
+            url = `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
+          }
+
+          try {
+            const resp = await fetch(url);
+            if (!resp.ok) return;
+            const buf = await resp.arrayBuffer();
+            const u8 = new Uint8Array(buf);
+            pyodide.globals.set("temp_tile_u8", u8);
+            pyodide.runPython(`
+if py_mod and hasattr(py_mod, 'receive_tile_bytes'):
+    try:
+        py_mod.receive_tile_bytes("${mode}", ${z}, ${x}, ${y}, bytes(temp_tile_u8))
+    except Exception:
+        pass
+`);
+          } catch (e) {
+            console.warn(`Tile fetch failed: ${mode} ${z}/${x}/${y}`, e);
+          }
+        }));
+      } catch (e) {
+      } finally {
+        isFetchingTiles = false;
+      }
+    }
 
     // 6. Handle User Input
     function sendKey(key) {

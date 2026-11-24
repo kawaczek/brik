@@ -518,7 +518,7 @@ if "serial" not in sys.modules:
         def __init__(self, *args, **kwargs): pass
         def write(self, data): pass
         def read(self, size=1): return b""
-        def readline(self): return b"[WASM SERIAL READY]\\n"
+        def readline(self): return b"[WASM SERIAL READY]"
         @property
         def in_waiting(self): return 0
         def close(self): pass

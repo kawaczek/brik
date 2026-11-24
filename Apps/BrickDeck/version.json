@@ -1,10 +1,10 @@
 {
     "app_name": "BrickDeck OS",
-    "version": "2.2.0",
+    "version": "2.3.0",
     "release_date": "2026-11-24",
     "git_branch": "main",
     "github_repo": "kawaczek/brik",
-    "changelog": "Online Update & Upgrade Engine dla systemu i osobnych modułów, mapy HD Web Mercator i radar ADS-B",
+    "changelog": "Domyślny język angielski (en), automatyczna detekcja języka systemu TrimUI Brick OS, zintegrowane tłumaczenia i18n sklepu i radaru ADS-B",
     "core_files": [
         "Apps/BrickDeck/brickdeck.py",
         "Apps/BrickDeck/launch.sh",

@@ -54,6 +54,27 @@ CORE_PROTECTED_MODULES = {
     "001_mod_clock", "025_mod_diag", "026_mod_system", "027_mod_store"
 }
 
+try:
+    from core.i18n import t
+except ImportError:
+    def t(k, d=None, **kwargs):
+        val = d if d is not None else k
+        if kwargs and isinstance(val, str):
+            return val.format(**kwargs)
+        return val
+
+CAT_MAP = {
+    "Wszystkie": "cat_all",
+    "⚡ Aktualizacje": "cat_updates",
+    "Zainstalowane": "cat_installed",
+    "Gry & 3D": "cat_games",
+    "Cyber & Hacking": "cat_cyber",
+    "Narzędzia & Net": "cat_tools",
+    "Nauka & Kosmos": "cat_science",
+    "Multimedia & Audio": "cat_media",
+    "🚀 System Upgrade": "cat_upgrade"
+}
+
 BASE_CATEGORIES = [
     "Wszystkie",
     "⚡ Aktualizacje",
@@ -721,18 +742,18 @@ class StoreModule(BaseModule):
         lw = 460
         draw.rounded_rectangle([lx, det_y, lx + lw, det_y + card_h], radius=8, fill=(16, 24, 38), outline=COLOR_CYBER_CYAN, width=2)
 
-        draw.text((lx + 20, det_y + 18), "⚡ SYSTEM UPGRADE ENGINE", fill=COLOR_CYBER_CYAN, font=get_font(18, bold=True))
-        draw.text((lx + 20, det_y + 44), "Aktualizacja online całego programu BrickDeck OS", fill=COLOR_TEXT_SECONDARY, font=get_font(12))
+        draw.text((lx + 20, det_y + 18), t("store.upgrade_title", "⚡ SYSTEM UPGRADE ENGINE"), fill=COLOR_CYBER_CYAN, font=get_font(18, bold=True))
+        draw.text((lx + 20, det_y + 44), t("store.upgrade_sub", "Online OTA System Upgrade for BrickDeck OS"), fill=COLOR_TEXT_SECONDARY, font=get_font(12))
         draw.line([(lx + 20, det_y + 66), (lx + lw - 20, det_y + 66)], fill=COLOR_BORDER, width=1)
 
         # Status Table
         sy = det_y + 78
         status_items = [
-            ("Zainstalowana wersja:", f"v{self.system_version_local}"),
-            ("Najnowsza wersja online:", f"v{self.system_version_remote}"),
-            ("Kanał aktualizacji:", "GitHub Official (main)"),
-            ("Połączenie Wi-Fi:", "POŁĄCZONO (Online)"),
-            ("Status integralności:", "Zweryfikowany (SHA256)")
+            (t("store.installed_v", "Installed Version:"), f"v{self.system_version_local}"),
+            (t("store.remote_v", "Latest on GitHub:"), f"v{self.system_version_remote}"),
+            ("Update Channel:", "GitHub Official (main)"),
+            ("Wi-Fi Network:", t("common.connected", "CONNECTED")),
+            ("Integrity Hash:", "Verified (SHA256)")
         ]
         for lbl, val in status_items:
             draw.text((lx + 20, sy), lbl, fill=COLOR_TEXT_SECONDARY, font=get_font(12))
@@ -743,8 +764,8 @@ class StoreModule(BaseModule):
 
         # Changelog / Summary Box
         cy = sy + 18
-        draw.text((lx + 20, cy), "DZIENNIK ZMIAN (CHANGELOG):", fill=COLOR_FLIPPER_AMBER, font=get_font(12, bold=True))
-        ch_text = self.system_changelog or "Wektorowy radar ADS-B, mapy HD Web Mercator, online updater modułów i systemu."
+        draw.text((lx + 20, cy), t("store.changelog", "CHANGELOG:"), fill=COLOR_FLIPPER_AMBER, font=get_font(12, bold=True))
+        ch_text = self.system_changelog or "ADS-B Vector Radar, HD Web Mercator Maps, Online Module and OS Updater."
 
         # Word wrap
         words = ch_text.split(" ")
@@ -763,23 +784,23 @@ class StoreModule(BaseModule):
         # Status Banner
         banner_y = det_y + card_h - 130
         if self.system_upgrade_done:
-            canvas.draw_badge(lx + 20, banner_y, "✓ UPGRADE ZAKOŃCZONY POMYŚLNIE!", bg_color=(0, 100, 50), text_color=(120, 255, 180))
+            canvas.draw_badge(lx + 20, banner_y, "✓ UPGRADE COMPLETED SUCCESSFULLY!", bg_color=(0, 100, 50), text_color=(120, 255, 180))
         elif self.system_update_available:
-            canvas.draw_badge(lx + 20, banner_y, "⚡ DOSTĘPNA NOWA WERSJA SYSTEMU ONLINE!", bg_color=(120, 80, 0), text_color=(255, 220, 0))
+            canvas.draw_badge(lx + 20, banner_y, "⚡ NEW SYSTEM VERSION AVAILABLE ONLINE!", bg_color=(120, 80, 0), text_color=(255, 220, 0))
         else:
-            canvas.draw_badge(lx + 20, banner_y, "✓ TWÓJ SYSTEM JEST W PEŁNI ZAKTUALIZOWANY", bg_color=(0, 80, 45), text_color=(120, 255, 180))
+            canvas.draw_badge(lx + 20, banner_y, "✓ SYSTEM IS FULLY UP TO DATE", bg_color=(0, 80, 45), text_color=(120, 255, 180))
 
         # Main Action Button
         btn_y = det_y + card_h - 64
         if self.system_upgrade_done:
             draw.rounded_rectangle([lx + 20, btn_y, lx + lw - 20, btn_y + 44], radius=6, fill=(0, 140, 70), outline=COLOR_PHOSPHOR_GREEN, width=2)
-            draw.text((lx + 45, btn_y + 12), "⚡ [A] ZRESTARTUJ BRICKDECK TERAZ", fill=(255, 255, 255), font=get_font(15, bold=True))
+            draw.text((lx + 45, btn_y + 12), t("store.btn_restart_now", "⚡ [A] RESTART BRICKDECK NOW"), fill=(255, 255, 255), font=get_font(15, bold=True))
         elif self.is_upgrading_system:
             draw.rounded_rectangle([lx + 20, btn_y, lx + lw - 20, btn_y + 44], radius=6, fill=(40, 50, 70), outline=COLOR_FLIPPER_AMBER, width=2)
-            draw.text((lx + 55, btn_y + 12), "TRWA AKTUALIZACJA... [CZEKAJ]", fill=COLOR_FLIPPER_AMBER, font=get_font(14, bold=True))
+            draw.text((lx + 55, btn_y + 12), t("store.upgrading", "UPGRADING SYSTEM... [PLEASE WAIT]"), fill=COLOR_FLIPPER_AMBER, font=get_font(14, bold=True))
         else:
             draw.rounded_rectangle([lx + 20, btn_y, lx + lw - 20, btn_y + 44], radius=6, fill=(0, 110, 160), outline=COLOR_CYBER_CYAN, width=2)
-            btn_lbl = "⚡ [A] WYKONAJ PEŁNY UPGRADE ONLINE" if self.system_update_available else "[A] WYMUŚ SYNCHRONIZACJĘ RDZENIA"
+            btn_lbl = "⚡ [A] RUN FULL SYSTEM UPGRADE" if self.system_update_available else "[A] FORCE CORE SYNC"
             draw.text((lx + 35, btn_y + 12), btn_lbl, fill=(255, 255, 255), font=get_font(14, bold=True))
 
         # Right Panel (w: 480) - Cyber Terminal Live Log
@@ -837,12 +858,14 @@ class StoreModule(BaseModule):
         cat_x = 36
         for i, cat in enumerate(self.categories):
             is_active = (i == self.active_cat_idx)
-            text_w = len(cat) * 9 + 18
+            cat_key = CAT_MAP.get(cat, "cat_all")
+            cat_label = t(f"store.{cat_key}", cat)
+            text_w = len(cat_label) * 9 + 18
             bg = (0, 110, 150) if is_active else (20, 26, 38)
             fg = (255, 255, 255) if is_active else COLOR_TEXT_SECONDARY
             border = COLOR_CYBER_CYAN if is_active else COLOR_BORDER
 
-            if "Aktualizacje" in cat and len(self.updates_available_ids) > 0:
+            if ("Aktualizacje" in cat or "Updates" in cat) and len(self.updates_available_ids) > 0:
                 border = COLOR_FLIPPER_AMBER
                 if not is_active:
                     fg = COLOR_FLIPPER_AMBER
@@ -852,7 +875,7 @@ class StoreModule(BaseModule):
                     border = COLOR_FLIPPER_AMBER
 
             draw.rounded_rectangle([(cat_x, cat_y), (cat_x + text_w, cat_y + 28)], radius=4, fill=bg, outline=border, width=2 if is_active else 1)
-            draw.text((cat_x + 9, cat_y + 5), cat, fill=fg, font=get_font(12, bold=is_active))
+            draw.text((cat_x + 9, cat_y + 5), cat_label, fill=fg, font=get_font(12, bold=is_active))
             cat_x += text_w + 6
 
         # 3. If System Upgrade category is selected:
@@ -875,11 +898,11 @@ class StoreModule(BaseModule):
         if not self.filtered_modules:
             if "Aktualizacje" in active_cat:
                 draw.rounded_rectangle([list_x, list_y_start, list_x + list_w, list_y_start + 140], radius=8, fill=(16, 24, 36), outline=COLOR_PHOSPHOR_GREEN, width=1)
-                draw.text((list_x + 24, list_y_start + 30), "✓ WSZYSTKIE MODUŁY SĄ AKTUALNE!", fill=(0, 255, 120), font=get_font(16, bold=True))
-                draw.text((list_x + 24, list_y_start + 65), "Twój BrickDeck posiada najnowsze wersje zainstalowanych modułów.", fill=COLOR_TEXT_SECONDARY, font=get_font(12))
-                draw.text((list_x + 24, list_y_start + 95), "Wciśnij [Y], aby sprawdzić repozytorium GitHub na nowo.", fill=COLOR_CYBER_CYAN, font=get_font(12))
+                draw.text((list_x + 24, list_y_start + 30), t("store.all_updated", "✓ ALL MODULES ARE UP TO DATE!"), fill=(0, 255, 120), font=get_font(16, bold=True))
+                draw.text((list_x + 24, list_y_start + 65), t("store.all_updated_sub", "Your BrickDeck runs the latest versions of all installed modules."), fill=COLOR_TEXT_SECONDARY, font=get_font(12))
+                draw.text((list_x + 24, list_y_start + 95), t("store.refresh_hint", "Press [Y] to refresh repository catalog."), fill=COLOR_CYBER_CYAN, font=get_font(12))
             else:
-                draw.text((list_x + 20, list_y_start + 40), "Brak modułów w wybranej kategorii", fill=COLOR_TEXT_MUTED, font=get_font(16))
+                draw.text((list_x + 20, list_y_start + 40), t("store.no_modules", "No modules found in selected category"), fill=COLOR_TEXT_MUTED, font=get_font(16))
         else:
             for slot in range(visible_count):
                 idx = scroll_offset + slot
@@ -944,25 +967,25 @@ class StoreModule(BaseModule):
             has_cur_update = (cur_id in self.updates_available_ids or (leg_id and leg_id in self.updates_available_ids))
 
             draw.text((det_x + 18, det_y + 14), cur.get("name", cur_id), fill=COLOR_CYBER_CYAN, font=get_font(16, bold=True))
-            draw.text((det_x + 18, det_y + 38), f"Plik: {cur_id}.py", fill=COLOR_TEXT_MUTED, font=get_font(12))
+            draw.text((det_x + 18, det_y + 38), f"{t('store.file_label', 'File:')} {cur_id}.py", fill=COLOR_TEXT_MUTED, font=get_font(12))
             draw.line([(det_x + 18, det_y + 58), (det_x + det_w - 18, det_y + 58)], fill=COLOR_BORDER, width=1)
 
             # Metadata Table
             meta_y = det_y + 68
             inst_v = self.installed_manifest.get(cur_id, {}).get("version", "1.0.0")
-            status_desc = "⚡ Wymaga aktualizacji!" if has_cur_update else ("Zainstalowany (Aktualny)" if is_cur_installed else "Dostępny w GitHub")
+            status_desc = "⚡ " + t("store.badge_update", "Update available!") if has_cur_update else (t("store.cat_installed", "Installed") if is_cur_installed else "Available on GitHub")
 
             fields = [
-                ("Autor", cur.get("author", "kawaczek")),
-                ("Wersja w GitHub", cur.get("version", "1.0.0")),
-                ("Wersja lokalna", inst_v if is_cur_installed else "Brak"),
-                ("Rozmiar", f"{cur.get('size_kb', 0)} KB"),
-                ("Kategoria", cur.get("category", "Ogólne")),
-                ("Status", status_desc)
+                (t("store.author_label", "Author:"), cur.get("author", "kawaczek")),
+                (t("store.version_label", "GitHub Version:"), cur.get("version", "1.0.0")),
+                (t("store.installed_v", "Installed:"), inst_v if is_cur_installed else "---"),
+                (t("store.size_label", "Size:"), f"{cur.get('size_kb', 0)} KB"),
+                (t("store.category_label", "Category:"), cur.get("category", "General")),
+                ("Status:", status_desc)
             ]
             for label, val in fields:
-                draw.text((det_x + 18, meta_y), f"{label}:", fill=COLOR_TEXT_SECONDARY, font=get_font(12))
-                col_v = (255, 215, 0) if has_cur_update and label == "Status" else COLOR_TEXT_PRIMARY
+                draw.text((det_x + 18, meta_y), f"{label}", fill=COLOR_TEXT_SECONDARY, font=get_font(12))
+                col_v = (255, 215, 0) if has_cur_update and label.startswith("Status") else COLOR_TEXT_PRIMARY
                 draw.text((det_x + 140, meta_y), str(val), fill=col_v, font=get_font(12, bold=True))
                 meta_y += 22
 
@@ -970,8 +993,8 @@ class StoreModule(BaseModule):
 
             # Description
             desc_y = meta_y + 16
-            draw.text((det_x + 18, desc_y), "OPIS MODUŁU:", fill=COLOR_CYBER_CYAN, font=get_font(12, bold=True))
-            desc_text = cur.get("description", "Brak opisu.")
+            draw.text((det_x + 18, desc_y), t("store.desc_label", "MODULE DESCRIPTION:"), fill=COLOR_CYBER_CYAN, font=get_font(12, bold=True))
+            desc_text = cur.get("description", "No description available.")
 
             words = desc_text.split(" ")
             line_buf = ""
@@ -989,7 +1012,7 @@ class StoreModule(BaseModule):
 
             ctrls = cur.get("controls", "")
             if ctrls:
-                draw.text((det_x + 18, dy + 6), "STEROWANIE:", fill=COLOR_FLIPPER_AMBER, font=get_font(11, bold=True))
+                draw.text((det_x + 18, dy + 6), t("store.ctrl_label", "CONTROLS:"), fill=COLOR_FLIPPER_AMBER, font=get_font(11, bold=True))
                 draw.text((det_x + 18, dy + 24), ctrls, fill=COLOR_TEXT_SECONDARY, font=get_font(11))
 
             # Bottom Action Buttons
@@ -998,21 +1021,26 @@ class StoreModule(BaseModule):
                 # Update button highlighted
                 btn_half = (det_w - 46) // 2
                 draw.rounded_rectangle([det_x + 18, btn_y, det_x + 18 + btn_half, btn_y + 44], radius=6, fill=(130, 90, 0), outline=COLOR_FLIPPER_AMBER, width=2)
-                draw.text((det_x + 24, btn_y + 14), f"⚡ [A] Aktualizuj do v{cur.get('version')}", fill=(255, 255, 255), font=get_font(12, bold=True))
+                up_to_lbl = t("store.update_to", "Update to v{ver}", ver=cur.get("version"))
+                draw.text((det_x + 24, btn_y + 14), f"⚡ [A] {up_to_lbl}", fill=(255, 255, 255), font=get_font(12, bold=True))
 
                 draw.rounded_rectangle([det_x + 28 + btn_half, btn_y, det_x + det_w - 18, btn_y + 44], radius=6, fill=(20, 30, 48), outline=COLOR_BORDER, width=1)
                 up_cnt = len(self.updates_available_ids)
-                draw.text((det_x + 36 + btn_half, btn_y + 14), f"[X] Wszystkie ({up_cnt})", fill=COLOR_TEXT_PRIMARY, font=get_font(12, bold=True))
+                up_all_lbl = t("store.update_all", "ALL ({count})", count=up_cnt)
+                draw.text((det_x + 36 + btn_half, btn_y + 14), f"[X] {up_all_lbl}", fill=COLOR_TEXT_PRIMARY, font=get_font(12, bold=True))
             elif is_cur_installed:
                 btn_half = (det_w - 46) // 2
                 draw.rounded_rectangle([det_x + 18, btn_y, det_x + 18 + btn_half, btn_y + 44], radius=6, fill=(0, 90, 130), outline=COLOR_CYBER_CYAN, width=1)
-                draw.text((det_x + 28, btn_y + 14), "[A] Przeinstaluj", fill=(255, 255, 255), font=get_font(13, bold=True))
+                reinst_lbl = t("store.reinstall", "Reinstall")
+                draw.text((det_x + 28, btn_y + 14), f"[A] {reinst_lbl}", fill=(255, 255, 255), font=get_font(13, bold=True))
 
                 draw.rounded_rectangle([det_x + 28 + btn_half, btn_y, det_x + det_w - 18, btn_y + 44], radius=6, fill=(110, 25, 25), outline=COLOR_NEON_PINK, width=1)
-                draw.text((det_x + 38 + btn_half, btn_y + 14), "[X] Odinstaluj", fill=(255, 255, 255), font=get_font(13, bold=True))
+                uninst_lbl = t("store.uninstall", "Uninstall")
+                draw.text((det_x + 38 + btn_half, btn_y + 14), f"[X] {uninst_lbl}", fill=COLOR_TEXT_PRIMARY, font=get_font(13, bold=True))
             else:
                 draw.rounded_rectangle([det_x + 18, btn_y, det_x + det_w - 18, btn_y + 44], radius=6, fill=(0, 120, 60), outline=COLOR_PHOSPHOR_GREEN, width=2)
-                draw.text((det_x + 40, btn_y + 14), "⚡ [A] ZAINSTALUJ Z GITHUBA", fill=(255, 255, 255), font=get_font(14, bold=True))
+                inst_lbl = t("store.install", "INSTALL FROM GITHUB")
+                draw.text((det_x + 40, btn_y + 14), f"⚡ [A] {inst_lbl}", fill=(255, 255, 255), font=get_font(14, bold=True))
 
     def handle_input(self, event: str) -> bool:
         active_cat = self.categories[self.active_cat_idx]

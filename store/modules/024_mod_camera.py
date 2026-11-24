@@ -91,12 +91,12 @@ class CameraModule(BaseModule):
         filter_name = FILTER_NAMES[self.filter_idx][0].split()[0]
         zoom_val = f"{ZOOM_LEVELS[self.zoom_idx]:.1f}x"
         return [
-            ("L1/R1", t("common.modules", "Moduly")),
-            ("A", t("camera.capture_hint", "Zrob zdjecie")),
-            ("X", f"{t('camera.filter_label', 'Filtr')}: {filter_name}"),
-            ("Y", t("camera.graticule", "Siatka")),
+            ("L1/R1", t("common.modules", "Modules")),
+            ("A", t("camera.capture_hint", "Take Snapshot")),
+            ("X", f"{t('camera.filter_label', 'Filter')}: {filter_name}"),
+            ("Y", t("camera.graticule", "Graticule")),
             ("D-Pad L/P", f"{t('common.zoom', 'Zoom')}: {zoom_val}"),
-            ("B", t("common.back", "Wroc"))
+            ("B", t("common.back", "Back"))
         ]
 
     def _check_hardware_device(self) -> Optional[str]:

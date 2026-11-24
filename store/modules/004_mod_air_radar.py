@@ -28,6 +28,15 @@ from core.theme import (
 )
 from core.canvas import get_font
 
+try:
+    from core.i18n import t
+except ImportError:
+    def t(k, d=None, **kwargs):
+        val = d if d is not None else k
+        if kwargs and isinstance(val, str):
+            return val.format(**kwargs)
+        return val
+
 # API Endpoints
 WHERETHEISS_URL = "https://api.wheretheiss.at/v1/satellites/25544"
 OPENSKY_BASE_URL = "https://opensky-network.org/api/states/all"
@@ -1067,7 +1076,7 @@ class AirRadarModule(BaseModule):
 
         pl_icon_x = bar_x + fill_w
         canvas.draw.ellipse([(pl_icon_x - 8, bar_y - 2), (pl_icon_x + 8, bar_y + 14)], fill=(255, 255, 255), outline=COLOR_CYBER_CYAN)
-        canvas.draw.text((bar_x + bar_w - 95, ry + 60), f"{int(prog * 100)}% TRASY", fill=COLOR_CYBER_CYAN, font=get_font(10, bold=True))
+        canvas.draw.text((bar_x + bar_w - 95, ry + 60), f"{int(prog * 100)}% {t('air_radar.route', 'ROUTE')}", fill=COLOR_CYBER_CYAN, font=get_font(10, bold=True))
 
         # Telemetry Stats
         tx, ty, tw = mx + 20, my + 358, mw - 40
@@ -1078,16 +1087,16 @@ class AirRadarModule(BaseModule):
         mach = speed / 1225.0
 
         col1 = [
-            ("Wysokość przelotowa:", f"FL{fl_alt:03d} ({int(fl.get('alt_m', 0)):,} m)".replace(",", " ")),
-            ("Prędkość rzeczywista:", f"{speed} km/h (M {mach:.2f})"),
-            ("Kurs magnetyczny:", f"{fl.get('track', 0):.1f}° (Heading)"),
-            ("Prędkość pionowa:", f"{fl.get('vert_rate', '+0 ft/min')} (Przelot)")
+            (t("air_radar.cruise_alt", "Cruise Alt:"), f"FL{fl_alt:03d} ({int(fl.get('alt_m', 0)):,} m)".replace(",", " ")),
+            (t("air_radar.true_speed", "True Speed:"), f"{speed} km/h (M {mach:.2f})"),
+            (t("air_radar.heading", "Heading:"), f"{fl.get('track', 0):.1f}° (Heading)"),
+            (t("air_radar.vert_speed", "Vert Speed:"), f"{fl.get('vert_rate', '+0 ft/min')} (Cruise)")
         ]
         col2 = [
-            ("Transponder Squawk:", f"{fl.get('squawk', '7000')} (ADS-B Mode-S)"),
-            ("Pozycja geograficzna:", f"{fl.get('lat', 0.0):.4f}°N, {fl.get('lon', 0.0):.4f}°E"),
-            ("Kraj rejestracji:", f"{fl.get('country', 'Polska')}"),
-            ("Status radaru:", "LOCKED ON RADAR (Sygnał 99%)")
+            (t("air_radar.transponder", "Transponder Squawk:"), f"{fl.get('squawk', '7000')} (ADS-B Mode-S)"),
+            (t("air_radar.coordinates", "Coordinates:"), f"{fl.get('lat', 0.0):.4f}°N, {fl.get('lon', 0.0):.4f}°E"),
+            (t("air_radar.country", "Country:"), f"{fl.get('country', 'Poland')}"),
+            (t("air_radar.radar_status", "Radar Status:"), t("air_radar.signal_locked", "LOCKED ON RADAR (Signal 99%)"))
         ]
 
         for idx, (lbl, val) in enumerate(col1):
@@ -1102,7 +1111,7 @@ class AirRadarModule(BaseModule):
             canvas.draw.text((tx + tw // 2 + 10, sy + 18), val, fill=col_v, font=get_font(12, bold=True))
 
         canvas.draw.text((mx + 24, my + mh - 30),
-                         "[L1/R1 lub D-Pad L/P]: Inny samolot  |  [A]: Śledź  |  [B]: Zamknij kartę",
+                         f"[L1/R1 / D-Pad]: {t('air_radar.nav_hint', 'Next Plane')}  |  [A]: {t('air_radar.track_hint', 'Track')}  |  [B]: {t('common.back', 'Back')}",
                          fill=COLOR_FLIPPER_AMBER, font=get_font(12, bold=True))
 
     def render(self, canvas):
@@ -1394,35 +1403,35 @@ class AirRadarModule(BaseModule):
         canvas.draw.text((rx + 12, ry + 10), "STACJA OBSERWACYJNA:", fill=(160, 185, 215), font=get_font(10, bold=True))
         canvas.draw.text((rx + 12, ry + 26), f"★ {self.obs_name[:20]}", fill=(255, 255, 255), font=get_font(14, bold=True))
         canvas.draw.text((rx + 12, ry + 48), f"GPS: {self.obs_lat:.4f}°N, {self.obs_lon:.4f}°E", fill=COLOR_CYBER_CYAN, font=get_font(11, bold=False))
-        canvas.draw_badge(rx + 12, ry + 78, "[B] ZMIEŃ BAZĘ (GPS)", bg_color=(38, 54, 80), text_color=COLOR_FLIPPER_AMBER)
+        canvas.draw_badge(rx + 12, ry + 78, f"[B] {t('air_radar.location', 'Base / GPS')}", bg_color=(38, 54, 80), text_color=COLOR_FLIPPER_AMBER)
 
         # 2. Selected Aircraft Quick Card (Snapped to locked target)
         ac_y = ry + 126
         sel_fl = self.selected_flight or (self.flights[self.target_flight_idx] if self.flights else None)
         canvas.draw.rounded_rectangle([(rx, ac_y), (rx + rw, ac_y + 195)], radius=8, fill=(26, 36, 56), outline=(255, 205, 0), width=2)
-        canvas.draw.text((rx + 12, ac_y + 10), f"⌖ CEL #{self.target_flight_idx + 1}: {sel_fl['callsign'] if sel_fl else '---'}",
+        canvas.draw.text((rx + 12, ac_y + 10), f"⌖ {t('air_radar.target', 'TARGET')} #{self.target_flight_idx + 1}: {sel_fl['callsign'] if sel_fl else '---'}",
                          fill=(255, 215, 0), font=get_font(12, bold=True))
         canvas.draw.line([(rx + 12, ac_y + 30), (rx + rw - 12, ac_y + 30)], fill=COLOR_BORDER, width=1)
 
         if sel_fl:
             fl_items = [
-                ("Linia:", f"{sel_fl.get('airline', 'N/A')[:18]}"),
-                ("Model:", f"{sel_fl.get('model', 'Boeing 737')[:16]}"),
-                ("Wysokość:", f"FL{int(sel_fl.get('alt_m', 0) * 3.28084 / 100):03d} ({int(sel_fl.get('alt_m', 0))} m)"),
-                ("Prędkość:", f"{sel_fl.get('speed_kmh', 0)} km/h"),
-                ("Trasa:", f"{sel_fl.get('origin', 'WAW')[:3]} ➔ {sel_fl.get('dest', 'FRA')[:3]}")
+                (t("air_radar.airline", "Airline:"), f"{sel_fl.get('airline', 'N/A')[:18]}"),
+                (t("air_radar.model", "Model:"), f"{sel_fl.get('model', 'Boeing 737')[:16]}"),
+                (t("air_radar.altitude_lbl", "Altitude:"), f"FL{int(sel_fl.get('alt_m', 0) * 3.28084 / 100):03d} ({int(sel_fl.get('alt_m', 0))} m)"),
+                (t("air_radar.speed_lbl", "Speed:"), f"{sel_fl.get('speed_kmh', 0)} km/h"),
+                (t("air_radar.route", "Route:"), f"{sel_fl.get('origin', 'WAW')[:3]} ➔ {sel_fl.get('dest', 'FRA')[:3]}")
             ]
             s_y = ac_y + 38
             for lbl, val in fl_items:
                 canvas.draw.text((rx + 12, s_y), lbl, fill=(160, 185, 215), font=get_font(10, bold=False))
                 canvas.draw.text((rx + 105, s_y), val, fill=(255, 255, 255), font=get_font(11, bold=True))
                 s_y += 22
-            canvas.draw_badge(rx + 12, ac_y + 155, "[A] ZOBACZ ZDJĘCIE & DANE", bg_color=(34, 52, 78), text_color=(0, 220, 255))
+            canvas.draw_badge(rx + 12, ac_y + 155, t("air_radar.view_photo", "[A] VIEW PHOTO & DETAILS"), bg_color=(34, 52, 78), text_color=(0, 220, 255))
 
         # 3. ISS Real-Time Flight Card
         iss_y = ac_y + 206
         canvas.draw.rounded_rectangle([(rx, iss_y), (rx + rw, iss_y + 175)], radius=8, fill=(26, 36, 56), outline=COLOR_FLIPPER_AMBER, width=1)
-        canvas.draw.text((rx + 12, iss_y + 10), "★ STACJA KOSMICZNA (ISS)", fill=COLOR_FLIPPER_AMBER, font=get_font(12, bold=True))
+        canvas.draw.text((rx + 12, iss_y + 10), t("air_radar.iss_title", "★ SPACE STATION (ISS)"), fill=COLOR_FLIPPER_AMBER, font=get_font(12, bold=True))
         canvas.draw.line([(rx + 12, iss_y + 30), (rx + rw - 12, iss_y + 30)], fill=COLOR_BORDER, width=1)
 
         iss_items = [

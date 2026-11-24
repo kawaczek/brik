@@ -97,16 +97,16 @@ class SystemModule(BaseModule):
         # 4 Metric Cards in 2x2 grid
         # Top-Left: CPU & Temperature (x=60, y=130, w=430, h=240)
         canvas.draw.rounded_rectangle([(60, 130), (490, 370)], radius=10, fill=(20, 24, 32), outline=COLOR_BORDER, width=1)
-        canvas.draw.text((80, 148), t("system.cpu_card", "PROCESOR (Allwinner A133P ARM64)"), fill=COLOR_CYBER_CYAN, font=canvas.draw.getfont())
+        canvas.draw.text((80, 148), t("system.cpu_card", "CPU (Allwinner A133P ARM64)"), fill=COLOR_CYBER_CYAN, font=canvas.draw.getfont())
         canvas.draw_gauge(x=80, y=190, w=370, h=16, value=self.stats["cpu_pct"], max_val=100,
-                          label=f"{t('system.cpu_load', 'Obciazenie CPU')}: {int(self.stats['cpu_pct'])}%", color=COLOR_CYBER_CYAN)
+                          label=f"{t('system.cpu_load', 'CPU Load')}: {int(self.stats['cpu_pct'])}%", color=COLOR_CYBER_CYAN)
         canvas.draw_gauge(x=80, y=250, w=370, h=16, value=self.stats["temp_c"], max_val=85,
-                          label=f"{t('system.soc_temp', 'Temperatura SoC')}: {self.stats['temp_c']:.1f} °C", color=COLOR_PHOSPHOR_GREEN)
-        canvas.draw.text((80, 310), t("system.cores_info", "Rdzenie: 4x Cortex-A53 @ 1.8 GHz | Arch: aarch64"), fill=COLOR_TEXT_SECONDARY, font=canvas.draw.getfont())
+                          label=f"{t('system.soc_temp', 'SoC Temperature')}: {self.stats['temp_c']:.1f} °C", color=COLOR_PHOSPHOR_GREEN)
+        canvas.draw.text((80, 310), t("system.cores_info", "Cores: 4x Cortex-A53 @ 1.8 GHz | Arch: aarch64"), fill=COLOR_TEXT_SECONDARY, font=canvas.draw.getfont())
 
         # Top-Right: RAM & Storage (x=534, y=130, w=430, h=240)
         canvas.draw.rounded_rectangle([(534, 130), (964, 370)], radius=10, fill=(20, 24, 32), outline=COLOR_BORDER, width=1)
-        canvas.draw.text((554, 148), t("system.ram_card", "PAMIĘĆ RAM I DYSK (MicroSD)"), fill=COLOR_CYBER_CYAN, font=canvas.draw.getfont())
+        canvas.draw.text((554, 148), t("system.ram_card", "RAM & STORAGE (MicroSD)"), fill=COLOR_CYBER_CYAN, font=canvas.draw.getfont())
         ram_pct = int((self.stats["ram_used"] / max(1, self.stats["ram_total"])) * 100)
         ram_label = t("system.ram_label", "RAM")
         canvas.draw_gauge(x=554, y=190, w=370, h=16, value=ram_pct, max_val=100,
@@ -115,22 +115,22 @@ class SystemModule(BaseModule):
         st_label = t("system.storage_label", "MicroSD")
         canvas.draw_gauge(x=554, y=250, w=370, h=16, value=st_pct, max_val=100,
                           label=f"{st_label}: {self.stats['storage_used']:.1f} GB / {self.stats['storage_total']:.1f} GB", color=COLOR_STATUS_OK)
-        canvas.draw.text((554, 310), t("system.power_info", "Zasilanie: Bateria Li-Po 3000 mAh | Stan: 88%"), fill=COLOR_TEXT_SECONDARY, font=canvas.draw.getfont())
+        canvas.draw.text((554, 310), t("system.power_info", "Power: Li-Po 3000 mAh Battery | State: 88%"), fill=COLOR_TEXT_SECONDARY, font=canvas.draw.getfont())
 
         # Bottom Panel: Network Interfaces & Language Switcher (x=60, y=400, w=904, h=260)
         canvas.draw.rounded_rectangle([(60, 400), (964, 660)], radius=10, fill=(20, 24, 32), outline=COLOR_BORDER, width=1)
-        canvas.draw.text((80, 418), t("system.network_card", "INTERFEJSY SIECIOWE I ŁĄCZNOŚĆ"), fill=COLOR_CYBER_CYAN, font=canvas.draw.getfont())
+        canvas.draw.text((80, 418), t("system.network_card", "NETWORK INTERFACES & CONNECTIVITY"), fill=COLOR_CYBER_CYAN, font=canvas.draw.getfont())
 
         # Language Selector Badge on the right
         lang_display = i18n.get_current_display_name()
-        canvas.draw_badge(680, 414, f"{lang_display} [Y: {t('system.lang_switch_hint', 'Zmien')}]", bg_color=(36, 46, 64), text_color=COLOR_CYBER_CYAN)
+        canvas.draw_badge(680, 414, f"{lang_display} [Y: {t('system.lang_switch_hint', 'Switch')}]", bg_color=(36, 46, 64), text_color=COLOR_CYBER_CYAN)
 
         canvas.draw.line([(60, 446), (964, 446)], fill=COLOR_BORDER, width=1)
 
         interfaces = [
-            ("📶 wlan0 (Wi-Fi 802.11 b/g/n)", self.stats["ip_wlan"], t("common.connected", "POŁĄCZONO"), COLOR_STATUS_OK),
-            ("🔌 usb0 (USB-C OTG Gadget)", self.stats["ip_usb"], t("common.active", "AKTYWNY"), COLOR_CYBER_CYAN),
-            ("📡 bnep0 (Bluetooth PAN)", self.stats["ip_bt"], t("common.listening", "NASŁUCH"), COLOR_TEXT_SECONDARY),
+            ("📶 wlan0 (Wi-Fi 802.11 b/g/n)", self.stats["ip_wlan"], t("common.connected", "CONNECTED"), COLOR_STATUS_OK),
+            ("🔌 usb0 (USB-C OTG Gadget)", self.stats["ip_usb"], t("common.active", "ACTIVE"), COLOR_CYBER_CYAN),
+            ("📡 bnep0 (Bluetooth PAN)", self.stats["ip_bt"], t("common.listening", "LISTENING"), COLOR_TEXT_SECONDARY),
         ]
 
         iy = 466

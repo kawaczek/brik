@@ -1,6 +1,6 @@
 """
 BrickDeck i18n (Internationalization) Engine
-Supports multi-language UI, fallback to English/Polish, system locale auto-detection,
+Supports multi-language UI, fallback to English, system locale auto-detection,
 and JSON locale packs in Apps/BrickDeck/locales/*.json.
 """
 
@@ -8,6 +8,51 @@ import os
 import json
 import glob
 from typing import Dict, Any, Optional, List
+
+
+LANGUAGE_ALIASES = {
+    # Polish
+    "pl": "pl", "pol": "pl", "polish": "pl", "polski": "pl",
+    # English
+    "en": "en", "eng": "en", "english": "en", "angielski": "en",
+    # German
+    "de": "de", "ger": "de", "deu": "de", "deutsch": "de", "german": "de", "niemiecki": "de",
+    # Spanish
+    "es": "es", "spa": "es", "espanol": "es", "español": "es", "spanish": "es", "hiszpanski": "es",
+    # French
+    "fr": "fr", "fre": "fr", "fra": "fr", "francais": "fr", "français": "fr", "french": "fr",
+    # Italian
+    "it": "it", "ita": "it", "italiano": "it", "italian": "it",
+    # Chinese
+    "zh": "zh", "chi": "zh", "zho": "zh", "chinese": "zh", "zhongwen": "zh",
+    # Japanese
+    "ja": "ja", "jp": "ja", "jpn": "ja", "japanese": "ja",
+    # Korean
+    "ko": "ko", "kor": "ko", "korean": "ko",
+    # Russian
+    "ru": "ru", "rus": "ru", "russian": "ru",
+    # Portuguese
+    "pt": "pt", "por": "pt", "portuguese": "pt", "portugues": "pt",
+}
+
+# TrimUI system configuration candidates on SD Card and internal storage
+TRIMUI_CANDIDATE_PATHS = [
+    "/mnt/SDCARD/trimui/system/language",
+    "/mnt/SDCARD/trimui/system/language.json",
+    "/mnt/SDCARD/trimui/system/system.json",
+    "/mnt/SDCARD/trimui/app/system/system.json",
+    "/mnt/SDCARD/System/etc/language.json",
+    "/mnt/SDCARD/System/state/language",
+    "/mnt/SDCARD/System/state/language.json",
+    "/mnt/SDCARD/System/system.json",
+    "/mnt/UDISK/language",
+    "/mnt/UDISK/system.json",
+    "/mnt/UDISK/trimui/system/language.json",
+    "/etc/trimui/language",
+    "/etc/trimui/language.json",
+    "/etc/language",
+    "/etc/language.json",
+]
 
 
 class I18nManager:
@@ -19,13 +64,35 @@ class I18nManager:
             locales_dir = os.path.join(base_dir, "locales")
         self.locales_dir = locales_dir
         self.translations: Dict[str, Dict[str, Any]] = {}
-        self.active_locale = "pl"
+        self.active_locale = "en"
         self.fallback_locale = "en"
         self.is_auto = True
         self.available_locales: List[Dict[str, str]] = []
 
         self.load_all_locales()
         self.init_from_config()
+
+    def _normalize_lang_code(self, raw: Any) -> Optional[str]:
+        """Convert raw language identifier, string, or alias into ISO code."""
+        if not raw:
+            return None
+        if isinstance(raw, int):
+            return None
+        raw_str = str(raw).strip().lower()
+        if not raw_str:
+            return None
+
+        # Check full string alias (e.g. "polish", "deutsch")
+        if raw_str in LANGUAGE_ALIASES:
+            return LANGUAGE_ALIASES[raw_str]
+
+        # Check prefixed code (e.g. "pl_PL.UTF-8" -> "pl", "en-US" -> "en")
+        for delimiter in (".", "_", "-", "/", " "):
+            raw_str = raw_str.split(delimiter)[0]
+            if raw_str in LANGUAGE_ALIASES:
+                return LANGUAGE_ALIASES[raw_str]
+
+        return LANGUAGE_ALIASES.get(raw_str, raw_str if len(raw_str) == 2 else None)
 
     def load_all_locales(self):
         """Scan locales_dir and load all json dictionaries."""
@@ -51,17 +118,50 @@ class I18nManager:
                         "author": meta.get("author", "Community")
                     })
             except Exception as e:
-                print(f"[i18n] Blad ladowania {fname}: {e}")
+                print(f"[i18n] Error loading {fname}: {e}")
+
+        # Ensure 'en' is first in available_locales for consistent cycling
+        self.available_locales.sort(key=lambda loc: (0 if loc["code"] == "en" else 1, loc["code"]))
 
     def detect_system_locale(self) -> str:
-        """Detect language from environment variables or OS locale."""
+        """
+        Detect system language from TrimUI Brick OS settings files or OS locale.
+        Falls back strictly to 'en' (English) if none detected or unsupported.
+        """
+        # 1. Check TrimUI Brick hardware filesystem paths
+        for path in TRIMUI_CANDIDATE_PATHS:
+            if os.path.exists(path) and os.path.isfile(path):
+                try:
+                    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                        content = f.read().strip()
+                    if not content:
+                        continue
+                    code = None
+                    if content.startswith("{"):
+                        data = json.loads(content)
+                        for k in ("language", "lang", "locale", "code", "sys_lang"):
+                            if k in data:
+                                code = self._normalize_lang_code(data[k])
+                                if code and code in self.translations:
+                                    return code
+                    else:
+                        first_line = content.splitlines()[0]
+                        code = self._normalize_lang_code(first_line)
+                        if code and code in self.translations:
+                            return code
+                except Exception:
+                    pass
+
+        # 2. Check Linux environment variables
         for env_var in ("LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE"):
             val = os.environ.get(env_var, "")
             if val:
-                code = val.split(".")[0].split("_")[0].lower()
-                if code in self.translations:
+                code = self._normalize_lang_code(val)
+                if code and code in self.translations:
                     return code
-        return "pl" if "pl" in self.translations else ("en" if "en" in self.translations else "pl")
+
+        # 3. Default strictly to English
+        return "en"
 
     def init_from_config(self):
         """Read preferred locale from settings.json or detect system locale."""
@@ -91,7 +191,7 @@ class I18nManager:
             self.is_auto = False
             self.active_locale = lang_code
         else:
-            print(f"[i18n] Nieznany kod jezyka: {lang_code}")
+            print(f"[i18n] Unknown language code: {lang_code}")
             return
 
         if save_to_settings:
@@ -105,10 +205,10 @@ class I18nManager:
                 with open(settings_path, "w", encoding="utf-8") as f:
                     json.dump(cfg, f, indent=4, ensure_ascii=False)
             except Exception as e:
-                print(f"[i18n] Nie udalo sie zapisac ustawien jezyka: {e}")
+                print(f"[i18n] Could not save language preference: {e}")
 
     def cycle_next_locale(self) -> str:
-        """Cycle to next available language: auto -> pl -> en -> de -> es -> auto..."""
+        """Cycle to next available language: auto -> en -> pl -> de -> es -> auto..."""
         codes = ["auto"] + [loc["code"] for loc in self.available_locales]
         current = "auto" if self.is_auto else self.active_locale
         try:
@@ -122,7 +222,7 @@ class I18nManager:
         return self.get_current_display_name()
 
     def get_current_display_name(self) -> str:
-        """Return formatted name e.g. '🇵🇱 Polski (pl)' or '🌐 Auto [pl]'."""
+        """Return formatted name e.g. '🇬🇧 English (en)' or '🌐 Auto [🇬🇧 EN]'."""
         if self.is_auto:
             flag = self.get_locale_flag(self.active_locale)
             return f"🌐 Auto [{flag} {self.active_locale.upper()}]"
@@ -150,8 +250,6 @@ class I18nManager:
         val = self._lookup(self.active_locale, key)
         if val is None and self.active_locale != self.fallback_locale:
             val = self._lookup(self.fallback_locale, key)
-        if val is None and self.fallback_locale != "pl":
-            val = self._lookup("pl", key)
         if val is None:
             val = default if default is not None else key
 

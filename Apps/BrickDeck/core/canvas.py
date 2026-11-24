@@ -204,7 +204,7 @@ class Canvas:
             x += len(str(desc_trans)) * 8 + 24
 
         # Menu / Exit hint on far right
-        exit_str = f"[MENU]: {t('common.exit', 'Wyjscie')}"
+        exit_str = f"[MENU]: {t('common.exit', 'Exit')}"
         self.draw.text((self.width - 160, y_top + 14), exit_str, fill=COLOR_TEXT_MUTED, font=font_btn)
 
     # --------------------------------------------------------------------------

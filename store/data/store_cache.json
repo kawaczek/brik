@@ -1,12 +1,12 @@
 {
     "repo_title": "BrickDeck OS Official App Store",
-    "repo_version": "2.2.0",
+    "repo_version": "2.3.0",
     "base_url": "https://raw.githubusercontent.com/kawaczek/brik/main",
     "updated_at": "2026-11-24",
     "system_info": {
-        "version": "2.2.0",
+        "version": "2.3.0",
         "release_date": "2026-11-24",
-        "changelog": "Online Update & Upgrade Engine dla systemu i modułów, mapy HD Web Mercator i radar ADS-B",
+        "changelog": "Domyślny język angielski (en), automatyczna detekcja języka systemu TrimUI Brick OS, zintegrowane tłumaczenia i18n sklepu i radaru ADS-B",
         "version_url": "https://raw.githubusercontent.com/kawaczek/brik/main/version.json"
     },
     "total_modules": 86,

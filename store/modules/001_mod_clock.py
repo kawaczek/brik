@@ -328,15 +328,15 @@ class ClockModule(BaseModule):
 
         # Weather Details
         font_det = get_font(13, bold=False)
-        cond_lbl = t("clock.conditions", "Warunki")
-        wind_lbl = t("clock.wind", "Wiatr")
-        smog_lbl = t("clock.smog", "Smog")
+        cond_lbl = t("clock.conditions", "Conditions")
+        wind_lbl = t("clock.wind", "Wind")
+        smog_lbl = t("clock.smog", "Air Quality")
         draw.text((604, 196), f"{cond_lbl}: {self.weather_status_str}", fill=COLOR_TEXT_PRIMARY, font=font_det)
-        draw.text((604, 222), f"{wind_lbl}: {self.weather_wind:.1f} km/h | Stacja: Open-Meteo",
+        draw.text((604, 222), f"{wind_lbl}: {self.weather_wind:.1f} km/h | Station: Open-Meteo",
                   fill=COLOR_TEXT_SECONDARY, font=font_det)
         draw.text((604, 248), f"{smog_lbl} (Gorzow): {self.smog_info} (PM2.5: {self.smog_pm25:.1f})",
                   fill=COLOR_PHOSPHOR_GREEN, font=font_det)
-        draw.text((604, 274), f"Odswiezanie [A: {t('clock.refresh_hint', 'Wymus')}]", fill=COLOR_TEXT_MUTED, font=font_det)
+        draw.text((604, 274), f"Refresh [A: {t('clock.refresh_hint', 'Refresh')}]", fill=COLOR_TEXT_MUTED, font=font_det)
 
         # 4. Bottom Half: REAL MZK GORZOW TRANSIT DISPLAY (x=36, y=334, w=952, h=360)
         canvas.draw.rounded_rectangle(

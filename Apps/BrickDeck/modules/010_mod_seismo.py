@@ -93,31 +93,46 @@ class SeismoModule(BaseModule):
                 self.last_fetch_time = now
             time.sleep(2.0)
 
+    def load_geojson_data(self, data):
+        """Parse USGS GeoJSON data directly from live web feed."""
+        if isinstance(data, (bytes, bytearray)):
+            data = data.decode("utf-8")
+        if isinstance(data, str):
+            data = json.loads(data)
+        feats = data.get("features", [])
+        new_quakes = []
+        for f in feats[:30]:
+            prop = f.get("properties", {})
+            geom = f.get("geometry", {})
+            coords = geom.get("coordinates", [0, 0, 0])
+            new_quakes.append({
+                "mag": float(prop.get("mag", 3.0) or 3.0),
+                "place": str(prop.get("place", "Nieznana lokalizacja")),
+                "lat": float(coords[1]),
+                "lon": float(coords[0]),
+                "depth_km": float(coords[2]),
+                "time": float(prop.get("time", 0)) / 1000.0,
+                "tsunami": int(prop.get("tsunami", 0) or 0)
+            })
+        if new_quakes:
+            self.quakes = new_quakes
+            self._update_distances()
+
     def _fetch_usgs_data(self):
         """Fetch live USGS M2.5+ earthquakes for the past day."""
         url = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson"
         try:
+            from pyodide.http import open_url
+            with open_url(url) as resp:
+                self.load_geojson_data(resp.read())
+                return
+        except Exception:
+            pass
+
+        try:
             req = urllib.request.Request(url, headers={"User-Agent": "BrickDeck-OS/2.0"})
             with urllib.request.urlopen(req, timeout=5.0) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                feats = data.get("features", [])
-                new_quakes = []
-                for f in feats[:20]:
-                    prop = f.get("properties", {})
-                    geom = f.get("geometry", {})
-                    coords = geom.get("coordinates", [0, 0, 0])
-                    new_quakes.append({
-                        "mag": float(prop.get("mag", 3.0) or 3.0),
-                        "place": str(prop.get("place", "Unknown Location")),
-                        "lat": float(coords[1]),
-                        "lon": float(coords[0]),
-                        "depth_km": float(coords[2]),
-                        "time": float(prop.get("time", 0)) / 1000.0,
-                        "tsunami": int(prop.get("tsunami", 0) or 0)
-                    })
-                if new_quakes:
-                    self.quakes = new_quakes
-                    self._update_distances()
+                self.load_geojson_data(resp.read().decode("utf-8"))
         except Exception:
             pass
 

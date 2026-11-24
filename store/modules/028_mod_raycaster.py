@@ -436,28 +436,36 @@ class RaycasterModule(BaseModule):
 
         # Gameplay Direct Movement & Actions
         if event in ("KEY_UP", "UP", "KEY_W", "w", "W"):
-            spd = 0.35 * (1.8 if self.keys_held["SPRINT"] else 1.0)
+            spd = 0.30 * (1.8 if self.keys_held["SPRINT"] else 1.0)
             dx = math.cos(self.angle) * spd
             dy = math.sin(self.angle) * spd
-            if MAZE_MAP[int(self.py) * MAP_W + int(self.px + dx)] == 0:
-                self.px += dx
-            if MAZE_MAP[int(self.py + dy) * MAP_W + int(self.px)] == 0:
-                self.py += dy
+            buf_x = 0.22 if dx > 0 else -0.22
+            buf_y = 0.22 if dy > 0 else -0.22
+            if 0 <= int(self.py) < MAP_H and 0 <= int(self.px + dx + buf_x) < MAP_W:
+                if MAZE_MAP[int(self.py) * MAP_W + int(self.px + dx + buf_x)] == 0:
+                    self.px += dx
+            if 0 <= int(self.py + dy + buf_y) < MAP_H and 0 <= int(self.px) < MAP_W:
+                if MAZE_MAP[int(self.py + dy + buf_y) * MAP_W + int(self.px)] == 0:
+                    self.py += dy
             return True
         elif event in ("KEY_DOWN", "DOWN", "KEY_S", "s", "S"):
-            spd = 0.35 * (1.8 if self.keys_held["SPRINT"] else 1.0)
+            spd = 0.30 * (1.8 if self.keys_held["SPRINT"] else 1.0)
             dx = math.cos(self.angle) * spd
             dy = math.sin(self.angle) * spd
-            if MAZE_MAP[int(self.py) * MAP_W + int(self.px - dx)] == 0:
-                self.px -= dx
-            if MAZE_MAP[int(self.py - dy) * MAP_W + int(self.px)] == 0:
-                self.py -= dy
+            buf_x = -0.22 if dx > 0 else 0.22
+            buf_y = -0.22 if dy > 0 else 0.22
+            if 0 <= int(self.py) < MAP_H and 0 <= int(self.px - dx + buf_x) < MAP_W:
+                if MAZE_MAP[int(self.py) * MAP_W + int(self.px - dx + buf_x)] == 0:
+                    self.px -= dx
+            if 0 <= int(self.py - dy + buf_y) < MAP_H and 0 <= int(self.px) < MAP_W:
+                if MAZE_MAP[int(self.py - dy + buf_y) * MAP_W + int(self.px)] == 0:
+                    self.py -= dy
             return True
         elif event in ("KEY_LEFT", "LEFT", "KEY_A", "a", "A"):
-            self.angle = (self.angle - 0.22) % (2.0 * math.pi)
+            self.angle = (self.angle - 0.16) % (2.0 * math.pi)
             return True
         elif event in ("KEY_RIGHT", "RIGHT", "KEY_D", "d", "D"):
-            self.angle = (self.angle + 0.22) % (2.0 * math.pi)
+            self.angle = (self.angle + 0.16) % (2.0 * math.pi)
             return True
         elif event in ("KEY_B", "BTN_B", "b", "B"):
             self.keys_held["SPRINT"] = not self.keys_held["SPRINT"]

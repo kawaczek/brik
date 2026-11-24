@@ -484,6 +484,14 @@ class SandboxModule(BaseModule):
         canvas.draw.line([(c_px - b_radius_px - 4, c_py), (c_px + b_radius_px + 4, c_py)], fill=cur_col, width=1)
         canvas.draw.line([(c_px, c_py - b_radius_px - 4), (c_px, c_py + b_radius_px + 4)], fill=cur_col, width=1)
 
+        # On-screen Pouring Status Pill
+        if self.is_pouring:
+            canvas.draw_badge(vx + 14, vy + 12, "● SYPANIE: WŁĄCZONE (Naciśnij [A] lub Spację)", bg_color=(20, 120, 50), text_color=(255, 255, 255))
+        elif self.is_erasing:
+            canvas.draw_badge(vx + 14, vy + 12, "● GUMKA: WŁĄCZONA (Naciśnij [B])", bg_color=(120, 30, 30), text_color=(255, 255, 255))
+        else:
+            canvas.draw_badge(vx + 14, vy + 12, "○ SYPANIE: WYŁĄCZONE (Naciśnij [A] lub rysuj myszką)", bg_color=(36, 46, 64), text_color=COLOR_TEXT_PRIMARY)
+
         # -------------------------------------------------------------
         # Right Panel: Element Palette & Chemical Inspector (x=700, y=116, w=284, h=560)
         # -------------------------------------------------------------
@@ -525,6 +533,38 @@ class SandboxModule(BaseModule):
     # -----------------------------------------------------------------
     # INPUT HANDLING
     # -----------------------------------------------------------------
+    def handle_pointer(self, cx: int, cy: int, is_down: bool) -> bool:
+        """Handle direct mouse or touch interaction on simulation screen or palette."""
+        vx, vy, vw, vh = 40, 116, 640, 560
+        rx, ry, rw, rh = 700, 116, 284, 560
+
+        # Check simulation viewport
+        if vx <= cx <= vx + vw and vy <= cy <= vy + vh:
+            grid_x = int((cx - vx - 2) * GRID_W / (vw - 4))
+            grid_y = int((cy - vy - 2) * GRID_H / (vh - 4))
+            self.cursor_x = max(2, min(GRID_W - 3, grid_x))
+            self.cursor_y = max(2, min(GRID_H - 3, grid_y))
+            self.is_pouring = is_down
+            if is_down:
+                self.is_erasing = False
+                self._apply_brush(ELEMENT_DEFS[self.active_elem_idx]["id"])
+            return True
+
+        # Check palette item clicks
+        if rx <= cx <= rx + rw and ry + 42 <= cy <= ry + rh - 110:
+            item_y = ry + 42
+            for idx, elem in enumerate(ELEMENT_DEFS):
+                if elem["id"] == E_AIR:
+                    continue
+                if item_y <= cy <= item_y + 42:
+                    self.active_elem_idx = idx
+                    return True
+                item_y += 46
+
+        if not is_down:
+            self.is_pouring = False
+        return False
+
     def handle_input(self, event: str) -> bool:
         # Move Cursor D-Pad (with 3-cell step)
         step = 3
@@ -534,15 +574,15 @@ class SandboxModule(BaseModule):
         elif event in ("DPAD_DOWN", "s", "S", "DOWN"):
             self.cursor_y = min(GRID_H - 3, self.cursor_y + step)
             return True
-        elif event in ("DPAD_LEFT", "a", "A", "LEFT"):
+        elif event in ("DPAD_LEFT", "LEFT"):
             self.cursor_x = max(2, self.cursor_x - step)
             return True
-        elif event in ("DPAD_RIGHT", "d", "D", "RIGHT"):
+        elif event in ("DPAD_RIGHT", "RIGHT"):
             self.cursor_x = min(GRID_W - 3, self.cursor_x + step)
             return True
 
-        # Pour element: A button
-        elif event in ("BTN_A", "a"):
+        # Pour element: A button / Space / Enter
+        elif event in ("BTN_A", "a", "A", "KEY_A", "KEY_ENTER", "SPACE", " "):
             self.is_pouring = not self.is_pouring
             self.is_erasing = False
             return True

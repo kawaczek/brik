@@ -660,7 +660,7 @@
 
         // Inject complete Core mocks and shims into Pyodide
         pyodide.runPython(`
-import sys, types
+import sys, types, math, os, time, json
 from PIL import Image, ImageDraw, ImageFont
 
 # 1. SSL Shim (in case unvendored)
@@ -868,6 +868,9 @@ i_mod = types.ModuleType("core.i18n")
 i_mod.t = lambda k, default=None: default or k
 class MockI18n:
     def get_lang(self): return "pl"
+    def get_current_display_name(self): return "Polski (PL)"
+    def cycle_next_locale(self): return "Polski (PL)"
+    def get_available_locales(self): return [("pl", "Polski"), ("en", "English")]
 i_mod.i18n = MockI18n()
 
 qr_mod = types.ModuleType("core.qr_engine")
@@ -885,8 +888,33 @@ class MockSurvival:
             {"id": "medical", "name": "Pierwsza Pomoc", "icon": "🩹", "badge": "MEDYK", "color": [255, 60, 60]}
         ]
         self.guides = [
-            {"id": "water_purif", "category": "water", "title": "Uzdatnianie wody w terenie", "desc": "Metoda SODIS, gotowanie i filtr węglowy.", "body": "1. Gotuj wodę min. 3 minuty.\n2. Użyj filtra piaskowo-węglowego.\n3. Tabletki z chlorem."},
-            {"id": "fire_bow", "category": "fire", "title": "Łuk ogniowy i krzesiwo", "desc": "Rozpalanie ognia bez zapałek.", "body": "Użyj suchego hubki i krzesiwa magnezowego."}
+            {
+                "id": "water_purif",
+                "category": "water",
+                "title": "Uzdatnianie wody w terenie",
+                "badge": "PRIORYTET #1",
+                "desc": "Metoda SODIS, gotowanie i filtr węglowy.",
+                "parsed_lines": [
+                    ("UZDATNIANIE WODY W TERENIE", "header"),
+                    ("1. Gotuj wodę minimum 3 minuty w pełnym wrzeniu.", "bold"),
+                    ("2. Zbuduj filtr: węgiel drzewny, piasek, żwir i mech.", "norm"),
+                    ("3. Metoda SODIS: 6 godzin na słońcu w przezroczystej butelce PET.", "norm"),
+                    ("4. Tabletki z chlorem / jodem: postępuj zgodnie z instrukcją.", "norm")
+                ]
+            },
+            {
+                "id": "fire_bow",
+                "category": "fire",
+                "title": "Rozpalanie ognia bez zapałek",
+                "badge": "OGIEŃ",
+                "desc": "Łuk ogniowy, krzesiwo i hubka.",
+                "parsed_lines": [
+                    ("ROZPALANIE OGNIA", "header"),
+                    ("1. Przygotuj suchą rozpałkę: suchy mech, hubka, kora.", "bold"),
+                    ("2. Krzesiwo magnezowe: kieruj iskry pod kątem 45 stopni.", "norm"),
+                    ("3. Ochrona przed wiatrem: zbuduj ekran z kłód.", "norm")
+                ]
+            }
         ]
     def get_categories(self): return self.categories
     def get_guides_for_category(self, cat_id): return [g for g in self.guides if g.get("category") == cat_id] or self.guides
@@ -1018,6 +1046,24 @@ else:
     py_mod = None
 `);
         log(`[+] Moduł ${modId} pomyślnie skompilowany i uruchomiony w Pythonie!`);
+
+        // Real USGS live seismic data fetcher for Seismograph
+        if (modId === '010_mod_seismo' || modId.includes('seismo')) {
+          fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson')
+            .then(r => r.json())
+            .then(data => {
+              pyodide.globals.set("usgs_raw_data", JSON.stringify(data));
+              pyodide.runPython(`
+if py_mod and hasattr(py_mod, 'load_geojson_data'):
+    try:
+        py_mod.load_geojson_data(usgs_raw_data)
+    except Exception as e:
+        pass
+`);
+              log("[+] Wczytano prawdziwe dane sejsmiczne USGS (live trzęsienia ziemi)!");
+            })
+            .catch(e => log("[-] Nie udało się pobrać danych USGS: " + e.message));
+        }
       } catch (err) {
         log(`[-] Błąd wykonania w Pythonie: ${err.message}`);
       }
@@ -1095,13 +1141,41 @@ if py_mod and hasattr(py_mod, 'handle_input'):
       }
     }
 
+    const heldKeys = new Set();
+    let keyRepeatInterval = null;
+
+    function pressKey(key) {
+      heldKeys.add(key);
+      sendKey(key);
+      if (!keyRepeatInterval) {
+        keyRepeatInterval = setInterval(() => {
+          if (heldKeys.size > 0) {
+            heldKeys.forEach(k => sendKey(k));
+          } else {
+            clearInterval(keyRepeatInterval);
+            keyRepeatInterval = null;
+          }
+        }, 65);
+      }
+    }
+
+    function releaseKey(key) {
+      heldKeys.delete(key);
+      if (heldKeys.size === 0 && keyRepeatInterval) {
+        clearInterval(keyRepeatInterval);
+        keyRepeatInterval = null;
+      }
+    }
+
     function bindBtn(id, key) {
       const el = document.getElementById(id);
       if (!el) return;
-      el.addEventListener('mousedown', () => { el.classList.add('pressed'); sendKey(key); });
-      window.addEventListener('mouseup', () => el.classList.remove('pressed'));
-      el.addEventListener('touchstart', (e) => { e.preventDefault(); el.classList.add('pressed'); sendKey(key); });
-      el.addEventListener('touchend', (e) => { e.preventDefault(); el.classList.remove('pressed'); });
+      el.addEventListener('mousedown', (e) => { e.preventDefault(); el.classList.add('pressed'); pressKey(key); });
+      el.addEventListener('mouseup', (e) => { e.preventDefault(); el.classList.remove('pressed'); releaseKey(key); });
+      el.addEventListener('mouseleave', () => { el.classList.remove('pressed'); releaseKey(key); });
+      el.addEventListener('touchstart', (e) => { e.preventDefault(); el.classList.add('pressed'); pressKey(key); });
+      el.addEventListener('touchend', (e) => { e.preventDefault(); el.classList.remove('pressed'); releaseKey(key); });
+      el.addEventListener('touchcancel', (e) => { e.preventDefault(); el.classList.remove('pressed'); releaseKey(key); });
     }
 
     bindBtn('btnUp', 'KEY_UP');
@@ -1118,18 +1192,55 @@ if py_mod and hasattr(py_mod, 'handle_input'):
     bindBtn('btnMenu', 'KEY_MENU');
     bindBtn('btnStart', 'KEY_START');
 
+    const keyMap = {
+      'ArrowUp': 'KEY_UP', 'KeyW': 'KEY_UP',
+      'ArrowDown': 'KEY_DOWN', 'KeyS': 'KEY_DOWN',
+      'ArrowLeft': 'KEY_LEFT', 'KeyA': 'KEY_LEFT',
+      'ArrowRight': 'KEY_RIGHT', 'KeyD': 'KEY_RIGHT',
+      'KeyJ': 'KEY_A', 'Space': 'KEY_A', 'Enter': 'KEY_A',
+      'KeyK': 'KEY_B', 'Escape': 'KEY_B',
+      'KeyU': 'KEY_X',
+      'KeyI': 'KEY_Y',
+      'KeyQ': 'KEY_L1', 'Minus': 'KEY_L1',
+      'KeyE': 'KEY_R1', 'Equal': 'KEY_R1'
+    };
+
     window.addEventListener('keydown', (e) => {
-      if (['ArrowUp', 'KeyW'].includes(e.code)) sendKey('KEY_UP');
-      if (['ArrowDown', 'KeyS'].includes(e.code)) sendKey('KEY_DOWN');
-      if (['ArrowLeft', 'KeyA'].includes(e.code)) sendKey('KEY_LEFT');
-      if (['ArrowRight', 'KeyD'].includes(e.code)) sendKey('KEY_RIGHT');
-      if (['KeyJ', 'Space', 'Enter'].includes(e.code)) sendKey('KEY_A');
-      if (['KeyK', 'Escape'].includes(e.code)) sendKey('KEY_B');
-      if (['KeyU'].includes(e.code)) sendKey('KEY_X');
-      if (['KeyI'].includes(e.code)) sendKey('KEY_Y');
-      if (['KeyQ', 'Minus'].includes(e.code)) sendKey('KEY_L1');
-      if (['KeyE', 'Equal'].includes(e.code)) sendKey('KEY_R1');
+      const k = keyMap[e.code];
+      if (k) {
+        if (!heldKeys.has(k)) pressKey(k);
+      }
     });
+
+    window.addEventListener('keyup', (e) => {
+      const k = keyMap[e.code];
+      if (k) {
+        releaseKey(k);
+      }
+    });
+
+    // Canvas Pointer support (mouse/touch drawing directly on screen for Sandbox, etc.)
+    function onCanvasPointer(e) {
+      if (!isReady) return;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const cx = (e.clientX - rect.left) * scaleX;
+      const cy = (e.clientY - rect.top) * scaleY;
+      const isDown = (e.buttons === 1 || e.type === 'pointerdown' || e.type === 'pointermove');
+
+      pyodide.runPython(`
+if py_mod and hasattr(py_mod, 'handle_pointer'):
+    try:
+        py_mod.handle_pointer(${Math.round(cx)}, ${Math.round(cy)}, ${isDown ? 'True' : 'False'})
+    except Exception:
+        pass
+`);
+    }
+
+    canvas.addEventListener('pointerdown', onCanvasPointer);
+    canvas.addEventListener('pointermove', (e) => { if (e.buttons === 1) onCanvasPointer(e); });
+    canvas.addEventListener('pointerup', onCanvasPointer);
 
     // 7. Display Scale Controls & Persistence
     const layoutEl = document.querySelector('.lab-layout');

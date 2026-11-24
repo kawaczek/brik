@@ -580,6 +580,22 @@
       logBox.scrollTop = logBox.scrollHeight;
     }
 
+    // Bridge for Python modules to fetch live online JSON in browser WASM
+    window.brickFetchSync = function(url) {
+      try {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", url, false);
+        xhr.setRequestHeader("Accept", "application/json");
+        xhr.send(null);
+        if (xhr.status >= 200 && xhr.status < 300) {
+          return xhr.responseText;
+        }
+      } catch (e) {
+        console.warn("[brickFetchSync] XHR fallback:", e);
+      }
+      return null;
+    };
+
     // 1. Initial Loading Screen on Canvas
     function drawLoading(msg) {
       ctx.fillStyle = '#070b12';

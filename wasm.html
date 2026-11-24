@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BrickDeck OS // Python WebAssembly Lab (Pyodide WASM)</title>
+  <meta name="description" content="Laboratorium uruchamiania surowych plików Python (.py) w przeglądarce przez Pyodide WebAssembly dla TrimUI Brick.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600;700&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #070a10;
+      --bg-card: #0e1522;
+      --bg-card-alt: #141e30;
+      --accent-cyan: #00f0ff;
+      --accent-amber: #ffaa00;
+      --accent-green: #00ff88;
+      --accent-purple: #c040fb;
+      --text-main: #d8e5f5;
+      --text-muted: #829ab5;
+      --font-display: 'Rajdhani', sans-serif;
+      --font-mono: 'Fira Code', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg-dark);
+      color: var(--text-main);
+      font-family: var(--font-display);
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    a { color: var(--accent-cyan); text-decoration: none; transition: all 0.2s; }
+    a:hover { color: #fff; text-shadow: 0 0 8px var(--accent-cyan); }
+    .container { max-width: 1300px; margin: 0 auto; padding: 0 24px; width: 100%; }
+
+    header {
+      background: rgba(14, 21, 34, 0.85);
+      border-bottom: 1px solid rgba(0, 240, 255, 0.2);
+      backdrop-filter: blur(8px);
+      padding: 14px 0;
+    }
+    .nav-inner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .logo {
+      font-family: var(--font-mono);
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--accent-amber);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .logo-badge {
+      background: rgba(255, 170, 0, 0.15);
+      border: 1px solid var(--accent-amber);
+      color: var(--accent-amber);
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 20px;
+      font-size: 14px;
+      font-family: var(--font-mono);
+    }
+
+    /* Page Layout */
+    .lab-layout {
+      display: grid;
+      grid-template-columns: 580px 1fr;
+      gap: 32px;
+      margin: 30px auto;
+      align-items: start;
+    }
+
+    @media (max-width: 1050px) {
+      .lab-layout { grid-template-columns: 1fr; }
+    }
+
+    /* Left Console Column */
+    .console-col { display: flex; flex-direction: column; align-items: center; }
+
+    .trimui-chassis {
+      width: 540px;
+      background: linear-gradient(180deg, #182230 0%, #0d141e 100%);
+      border: 2px solid #2a3a50;
+      border-radius: 28px;
+      padding: 24px 20px 28px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.9), 0 0 20px rgba(0, 240, 255, 0.08);
+      user-select: none;
+    }
+
+    .bumper-bar {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 14px;
+      padding: 0 10px;
+    }
+    .bumper {
+      background: #1e2b3c;
+      border: 1px solid #3d5370;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: bold;
+      padding: 6px 18px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .bumper:active { background: var(--accent-cyan); color: #000; }
+
+    .screen-bezel {
+      background: #000;
+      border: 3px solid #1a2533;
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: inset 0 4px 12px rgba(0, 0, 0, 0.9);
+      margin-bottom: 18px;
+    }
+
+    .screen-header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--accent-amber);
+    }
+
+    canvas {
+      width: 100%;
+      height: auto;
+      aspect-ratio: 4 / 3;
+      background: #06090e;
+      border-radius: 6px;
+      display: block;
+      image-rendering: pixelated;
+    }
+
+    /* Controls Panel */
+    .controls-panel {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 10px 0;
+    }
+
+    .dpad-wrapper {
+      width: 120px;
+      height: 120px;
+      position: relative;
+    }
+    .dpad-btn {
+      position: absolute;
+      width: 38px;
+      height: 38px;
+      background: #223247;
+      border: 1px solid #3d5475;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      border-radius: 6px;
+    }
+    .dpad-btn:active, .dpad-btn.pressed { background: var(--accent-cyan); color: #000; }
+    .dpad-up { top: 0; left: 41px; }
+    .dpad-down { bottom: 0; left: 41px; }
+    .dpad-left { top: 41px; left: 0; }
+    .dpad-right { top: 41px; right: 0; }
+    .dpad-center { position: absolute; width: 42px; height: 42px; top: 39px; left: 39px; background: #1c293a; }
+
+    .system-buttons {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-logo {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 2px;
+      color: #475569;
+      font-weight: 700;
+    }
+    .pill-group { display: flex; gap: 8px; }
+    .pill-btn {
+      background: #1c293a;
+      border: 1px solid #33445c;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 9px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      cursor: pointer;
+    }
+    .pill-btn:active { background: #fff; color: #000; }
+
+    .abxy-wrapper {
+      width: 120px;
+      height: 120px;
+      position: relative;
+    }
+    .action-btn {
+      position: absolute;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: #223247;
+      border: 1px solid #3d5475;
+      color: #f1f5f9;
+      font-family: var(--font-mono);
+      font-size: 14px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .action-btn:active, .action-btn.pressed { background: var(--accent-green); color: #000; }
+    .btn-x { top: 0; left: 41px; }
+    .btn-b { bottom: 0; left: 41px; }
+    .btn-y { top: 41px; left: 0; }
+    .btn-a { top: 41px; right: 0; }
+
+    /* Right Details Column */
+    .lab-col {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .panel {
+      background: var(--bg-card);
+      border: 1px solid rgba(255, 170, 0, 0.2);
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .panel-title {
+      font-family: var(--font-mono);
+      font-size: 15px;
+      color: var(--accent-amber);
+      font-weight: 700;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .module-select {
+      width: 100%;
+      background: #141e2e;
+      border: 1px solid #334760;
+      color: #fff;
+      font-family: var(--font-mono);
+      font-size: 14px;
+      padding: 10px 14px;
+      border-radius: 6px;
+      margin-bottom: 14px;
+    }
+
+    .code-viewer {
+      background: #080c14;
+      border: 1px solid #1a2638;
+      border-radius: 6px;
+      padding: 14px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: #94a3b8;
+      max-height: 280px;
+      overflow-y: auto;
+      white-space: pre;
+    }
+
+    .console-log {
+      background: #06090e;
+      border: 1px solid #1a2638;
+      border-radius: 6px;
+      padding: 12px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--accent-green);
+      height: 120px;
+      overflow-y: auto;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+    .status-ready { background: rgba(0, 255, 136, 0.15); border: 1px solid var(--accent-green); color: var(--accent-green); }
+    .status-loading { background: rgba(255, 170, 0, 0.15); border: 1px solid var(--accent-amber); color: var(--accent-amber); }
+
+    .btn-action {
+      background: var(--accent-amber);
+      color: #080c14;
+      border: none;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 700;
+      padding: 10px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+    .btn-action:hover {
+      box-shadow: 0 0 14px rgba(255, 170, 0, 0.5);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="container nav-inner">
+      <div class="logo">
+        <span>🐍 BRICKDECK OS // PYTHON WASM LAB</span>
+        <span class="logo-badge">CPython 3.12 + Pillow</span>
+      </div>
+      <nav class="nav-links">
+        <a href="index.html">← Wróć do Strony Głównej & Sklepu</a>
+        <a href="https://github.com/kawaczek/brik" target="_blank">GitHub ↗</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="lab-layout">
+      <!-- LEFT: CONSOLE -->
+      <div class="console-col">
+        <div class="trimui-chassis">
+          <div class="bumper-bar">
+            <button class="bumper" id="btnL1">L1 // PREV</button>
+            <button class="bumper" id="btnR1">R1 // NEXT</button>
+          </div>
+
+          <div class="screen-bezel">
+            <div class="screen-header-bar">
+              <span>🐍 PYODIDE WEBASSEMBLY DISPLAY</span>
+              <span id="fpsBadge">60 FPS</span>
+            </div>
+            <canvas id="wasmCanvas" width="640" height="480"></canvas>
+          </div>
+
+          <div class="controls-panel">
+            <div class="dpad-wrapper">
+              <button class="dpad-btn dpad-up" id="btnUp">▲</button>
+              <button class="dpad-btn dpad-left" id="btnLeft">◀</button>
+              <div class="dpad-center"></div>
+              <button class="dpad-btn dpad-right" id="btnRight">▶</button>
+              <button class="dpad-btn dpad-down" id="btnDown">▼</button>
+            </div>
+
+            <div class="system-buttons">
+              <div class="brand-logo">TRIMUI BRICK</div>
+              <div class="pill-group">
+                <button class="pill-btn" id="btnSelect">SELECT</button>
+                <button class="pill-btn" id="btnMenu">MENU</button>
+                <button class="pill-btn" id="btnStart">START</button>
+              </div>
+            </div>
+
+            <div class="abxy-wrapper">
+              <button class="action-btn btn-x" id="btnX">X</button>
+              <button class="action-btn btn-y" id="btnY">Y</button>
+              <button class="action-btn btn-b" id="btnB">B</button>
+              <button class="action-btn btn-a" id="btnA">A</button>
+            </div>
+          </div>
+        </div>
+
+        <p style="font-family:var(--font-mono); font-size:12px; color:var(--text-muted); margin-top:14px;">
+          Klawisze PC: Strzałki / WASD • Spacja / J (A) • K (B) • U (X) • I (Y) • Q/E (L1/R1)
+        </p>
+      </div>
+
+      <!-- RIGHT: CONTROLS & CODE VIEWER -->
+      <div class="lab-col">
+        <div class="panel">
+          <div class="panel-title">
+            <span>WYBIERZ MODUŁ DO ODPALENIA W WASM:</span>
+            <span id="runtimeStatus" class="status-badge status-loading">Inicjalizacja...</span>
+          </div>
+
+          <select id="moduleSelect" class="module-select">
+            <option value="">Ładowanie listy modułów...</option>
+          </select>
+
+          <div style="display:flex; gap:10px; margin-bottom:14px;">
+            <button id="btnReload" class="btn-action">🔄 Załaduj i Odpal .py</button>
+            <a id="btnDownloadPy" href="#" download class="btn-action" style="background:#1e293b; color:#fff; border:1px solid #334155;">💾 Pobierz czysty .py</a>
+          </div>
+
+          <p style="font-size:14px; color:var(--text-muted);">
+            Ten symulator pobiera bezpośrednio <strong>dokładnie ten sam plik .py</strong>, który instalujesz na konsoli TrimUI Brick, i wykonuje go w wirtualnej maszynie CPython z biblioteką graficzną Pillow w przeglądarce.
+          </p>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">
+            <span>KONSOLA PYTHON (STDOUT / LOGI):</span>
+            <span id="renderTime">Czas klatki: -- ms</span>
+          </div>
+          <div id="consoleLog" class="console-log">Inicjalizacja środowiska WebAssembly...\n</div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">
+            <span>SUROWY KOD ŹRÓDŁOWY (.py):</span>
+            <span id="codeSize">0 linii</span>
+          </div>
+          <div id="codeViewer" class="code-viewer"># Wybierz moduł powyżej, aby zobaczyć kod źródłowy...</div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Load Pyodide CDN -->
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+
+  <script>
+    const canvas = document.getElementById('wasmCanvas');
+    const ctx = canvas.getContext('2d');
+    const logBox = document.getElementById('consoleLog');
+    const codeViewer = document.getElementById('codeViewer');
+    const runtimeStatus = document.getElementById('runtimeStatus');
+    const moduleSelect = document.getElementById('moduleSelect');
+    const renderTime = document.getElementById('renderTime');
+    const btnDownloadPy = document.getElementById('btnDownloadPy');
+
+    let pyodide = null;
+    let isReady = false;
+    let currentModId = "mod_raycaster";
+    let offscreenCanvas = document.createElement('canvas');
+    offscreenCanvas.width = 1024;
+    offscreenCanvas.height = 768;
+    let offCtx = offscreenCanvas.getContext('2d');
+
+    function log(msg) {
+      logBox.textContent += msg + "\n";
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    // Input state
+    const inputState = {
+      up: false, down: false, left: false, right: false,
+      a: false, b: false, x: false, y: false, l1: false, r1: false
+    };
+
+    // 1. Initial Loading Screen on Canvas
+    function drawLoading(msg) {
+      ctx.fillStyle = '#070b12';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#ffaa00';
+      ctx.font = 'bold 18px "Fira Code", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText("🐍 PYTHON WEBASSEMBLY RUNNER", canvas.width / 2, canvas.height / 2 - 20);
+      ctx.fillStyle = '#00f0ff';
+      ctx.font = '13px "Fira Code", monospace';
+      ctx.fillText(msg, canvas.width / 2, canvas.height / 2 + 15);
+      ctx.textAlign = 'left';
+    }
+    drawLoading("Pobieranie silnika Pyodide WASM...");
+
+    // 2. Initialize Pyodide & BrickDeck Core
+    async function initWasm() {
+      try {
+        log("[*] Pobieranie silnika CPython 3.12 WebAssembly...");
+        pyodide = await loadPyodide();
+        log("[+] CPython zainicjalizowany pomyślnie.");
+
+        drawLoading("Instalacja biblioteki Pillow (PIL)...");
+        log("[*] Instalowanie pakietu graficznego Pillow...");
+        await pyodide.loadPackage("pillow");
+        log("[+] Pillow gotowy.");
+
+        drawLoading("Wstrzykiwanie środowiska BrickDeck Core...");
+        pyodide.runPython(`
+import sys, types
+from PIL import Image, ImageDraw, ImageFont
+
+def get_font(size=14, bold=False):
+    return ImageFont.load_default()
+
+class Canvas:
+    def __init__(self, width=1024, height=768):
+        self.width = width
+        self.height = height
+        self.image = Image.new("RGBA", (width, height), (10, 15, 24, 255))
+        self.draw = ImageDraw.Draw(self.image)
+    def clear(self, bg_color=(10, 15, 24, 255)):
+        self.draw.rectangle([(0, 0), (self.width, self.height)], fill=bg_color)
+    def draw_card(self, x, y, w, h, title="", subtitle="", border_color=(0, 200, 255), fill_color=(16, 24, 36)):
+        self.draw.rounded_rectangle([(x, y), (x + w, y + h)], radius=8, fill=fill_color, outline=border_color, width=2)
+        if title:
+            self.draw.text((x + 14, y + 12), title, fill=(240, 245, 255), font=get_font(15, bold=True))
+        if subtitle:
+            self.draw.text((x + 14, y + 36), subtitle, fill=(130, 160, 190), font=get_font(12))
+    def draw_badge(self, x, y, text, bg_color=(30, 45, 65), text_color=(240, 245, 255)):
+        bw = len(text) * 8 + 14
+        self.draw.rounded_rectangle([(x, y), (x + bw, y + 24)], radius=4, fill=bg_color, outline=(0, 200, 255))
+        self.draw.text((x + 6, y + 4), text, fill=text_color, font=get_font(11, bold=True))
+
+class BaseModule:
+    def __init__(self, app_context=None):
+        self.app_context = app_context
+    def update(self, dt): pass
+    def render(self, canvas): pass
+    def handle_input(self, event): return False
+    def get_hotkey_hints(self): return []
+
+c_mod = types.ModuleType("core.canvas")
+c_mod.Canvas = Canvas
+c_mod.get_font = get_font
+
+b_mod = types.ModuleType("core.module_base")
+b_mod.BaseModule = BaseModule
+
+t_mod = types.ModuleType("core.theme")
+t_mod.SCREEN_WIDTH = 1024
+t_mod.SCREEN_HEIGHT = 768
+t_mod.COLOR_BG_DARK = (10, 15, 24, 255)
+t_mod.COLOR_BORDER = (40, 60, 80)
+t_mod.COLOR_CYBER_CYAN = (0, 240, 255)
+t_mod.COLOR_TEXT_PRIMARY = (240, 245, 255)
+
+i_mod = types.ModuleType("core.i18n")
+i_mod.t = lambda k, default=None: default or k
+
+core_pkg = types.ModuleType("core")
+core_pkg.canvas = c_mod
+core_pkg.module_base = b_mod
+core_pkg.theme = t_mod
+core_pkg.i18n = i_mod
+
+sys.modules["core"] = core_pkg
+sys.modules["core.canvas"] = c_mod
+sys.modules["core.module_base"] = b_mod
+sys.modules["core.theme"] = t_mod
+sys.modules["core.i18n"] = i_mod
+
+py_canvas = Canvas()
+py_mod = None
+`);
+        log("[+] BrickDeck Core zainicjalizowany w Pyodide.");
+        runtimeStatus.className = "status-badge status-ready";
+        runtimeStatus.textContent = "CPython 3.12 Gotowy";
+        isReady = true;
+
+        await loadModuleCatalog();
+        await runModule("mod_raycaster");
+      } catch (e) {
+        log("[-] Błąd inicjalizacji: " + e.message);
+        runtimeStatus.textContent = "Błąd inicjalizacji";
+      }
+    }
+
+    // 3. Load Modules List from store/registry.json
+    async function loadModuleCatalog() {
+      try {
+        const res = await fetch('store/registry.json');
+        if (res.ok) {
+          const data = await res.json();
+          moduleSelect.innerHTML = '';
+          data.modules.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.id;
+            opt.textContent = `${m.name} [${m.category}]`;
+            moduleSelect.appendChild(opt);
+          });
+          moduleSelect.value = currentModId;
+        }
+      } catch (e) {
+        log("[-] Nie udało się wczytać registry.json: " + e.message);
+      }
+    }
+
+    // 4. Fetch & Run Raw Python Module
+    async function runModule(modId) {
+      if (!isReady) return;
+      currentModId = modId;
+      log(`[*] Pobieranie ${modId}.py...`);
+
+      let code = "";
+      let path = `store/modules/${modId}.py`;
+      let resp = await fetch(path);
+      if (!resp.ok) {
+        path = `Apps/BrickDeck/modules/${modId}.py`;
+        resp = await fetch(path);
+      }
+
+      if (resp.ok) {
+        code = await resp.text();
+        log(`[+] Pobrano ${code.length} bajtów kodu.`);
+      } else {
+        log(`[-] Błąd: Plik ${modId}.py nie znaleziony w repozytorium.`);
+        return;
+      }
+
+      codeViewer.textContent = code;
+      document.getElementById('codeSize').textContent = `${code.split('\n').length} linii`;
+      btnDownloadPy.href = path;
+      btnDownloadPy.setAttribute("download", `${modId}.py`);
+
+      pyodide.globals.set("raw_code", code);
+      try {
+        pyodide.runPython(`
+import sys
+
+if 'cur_mod' in sys.modules:
+    del sys.modules['cur_mod']
+
+cur_mod = types.ModuleType("cur_mod")
+exec(raw_code, cur_mod.__dict__)
+
+mod_cls = None
+for attr in dir(cur_mod):
+    if attr.endswith("Module") and attr != "BaseModule":
+        mod_cls = getattr(cur_mod, attr)
+        break
+
+if mod_cls:
+    py_mod = mod_cls()
+    py_canvas.clear()
+else:
+    py_mod = None
+`);
+        log(`[+] Moduł ${modId} pomyślnie skompilowany i uruchomiony!`);
+      } catch (err) {
+        log(`[-] Błąd wykonania w Pythonie: ${err.message}`);
+      }
+    }
+
+    // 5. Game Loop
+    let lastTime = performance.now();
+    let frameCount = 0;
+    let lastFpsUpdate = performance.now();
+
+    function renderLoop() {
+      const now = performance.now();
+      const dt = (now - lastTime) / 1000.0;
+      lastTime = now;
+
+      frameCount++;
+      if (now - lastFpsUpdate >= 1000) {
+        document.getElementById('fpsBadge').textContent = `${frameCount} FPS`;
+        frameCount = 0;
+        lastFpsUpdate = now;
+      }
+
+      if (isReady) {
+        try {
+          const t0 = performance.now();
+          const hasMod = pyodide.runPython(`py_mod is not None`);
+          if (hasMod) {
+            const rawBytes = pyodide.runPython(`
+py_mod.update(0.016)
+py_canvas.clear()
+py_mod.render(py_canvas)
+py_canvas.image.tobytes("raw", "RGBA")
+`);
+            const t1 = performance.now();
+            renderTime.textContent = `Czas klatki: ${(t1 - t0).toFixed(1)} ms`;
+
+            const imgData = new ImageData(new Uint8ClampedArray(rawBytes.toJs()), 1024, 768);
+            offCtx.putImageData(imgData, 0, 0);
+            ctx.drawImage(offscreenCanvas, 0, 0, canvas.width, canvas.height);
+          }
+        } catch (e) {
+          // keep going
+        }
+      }
+
+      requestAnimationFrame(renderLoop);
+    }
+    requestAnimationFrame(renderLoop);
+
+    // 6. Handle User Input
+    function sendKey(key) {
+      if (isReady) {
+        try {
+          pyodide.runPython(`
+if py_mod and hasattr(py_mod, 'handle_input'):
+    py_mod.handle_input("${key}")
+`);
+        } catch (e) {}
+      }
+    }
+
+    function bindBtn(id, key) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('mousedown', () => { el.classList.add('pressed'); sendKey(key); });
+      window.addEventListener('mouseup', () => el.classList.remove('pressed'));
+      el.addEventListener('touchstart', (e) => { e.preventDefault(); el.classList.add('pressed'); sendKey(key); });
+      el.addEventListener('touchend', (e) => { e.preventDefault(); el.classList.remove('pressed'); });
+    }
+
+    bindBtn('btnUp', 'KEY_UP');
+    bindBtn('btnDown', 'KEY_DOWN');
+    bindBtn('btnLeft', 'KEY_LEFT');
+    bindBtn('btnRight', 'KEY_RIGHT');
+    bindBtn('btnA', 'KEY_A');
+    bindBtn('btnB', 'KEY_B');
+    bindBtn('btnX', 'KEY_X');
+    bindBtn('btnY', 'KEY_Y');
+    bindBtn('btnL1', 'KEY_L1');
+    bindBtn('btnR1', 'KEY_R1');
+
+    window.addEventListener('keydown', (e) => {
+      if (['ArrowUp', 'KeyW'].includes(e.code)) sendKey('KEY_UP');
+      if (['ArrowDown', 'KeyS'].includes(e.code)) sendKey('KEY_DOWN');
+      if (['ArrowLeft', 'KeyA'].includes(e.code)) sendKey('KEY_LEFT');
+      if (['ArrowRight', 'KeyD'].includes(e.code)) sendKey('KEY_RIGHT');
+      if (['KeyJ', 'Space'].includes(e.code)) sendKey('KEY_A');
+      if (['KeyK'].includes(e.code)) sendKey('KEY_B');
+      if (['KeyU'].includes(e.code)) sendKey('KEY_X');
+      if (['KeyI'].includes(e.code)) sendKey('KEY_Y');
+      if (['KeyQ'].includes(e.code)) sendKey('KEY_L1');
+      if (['KeyE'].includes(e.code)) sendKey('KEY_R1');
+    });
+
+    moduleSelect.addEventListener('change', (e) => {
+      runModule(e.target.value);
+    });
+
+    document.getElementById('btnReload').addEventListener('click', () => {
+      runModule(moduleSelect.value || currentModId);
+    });
+
+    initWasm();
+  </script>
+</body>
+</html>

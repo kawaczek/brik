@@ -1,8 +1,14 @@
 {
     "repo_title": "BrickDeck OS Official App Store",
-    "repo_version": "2.0",
+    "repo_version": "2.2.0",
     "base_url": "https://raw.githubusercontent.com/kawaczek/brik/main",
     "updated_at": "2026-11-24",
+    "system_info": {
+        "version": "2.2.0",
+        "release_date": "2026-11-24",
+        "changelog": "Online Update & Upgrade Engine dla systemu i modułów, mapy HD Web Mercator i radar ADS-B",
+        "version_url": "https://raw.githubusercontent.com/kawaczek/brik/main/version.json"
+    },
     "total_modules": 86,
     "categories": [
         "Wszystkie",
@@ -63,14 +69,14 @@
             "id": "004_mod_air_radar",
             "legacy_id": "mod_air_radar",
             "name": "004 // Global Aerospace & Satellite Radar",
-            "version": "1.0.0",
+            "version": "2.1.0",
             "category": "Nauka & Kosmos",
             "author": "kawaczek",
-            "description": "Globus 3D, orbita stacji ISS, przeloty satelitów i radar ruchu lotniczego ADS-B OpenSky.",
-            "size_kb": 29,
+            "description": "Wektorowy radar lotniczy ADS-B na żywo, kolorowe mapy HD (Web Mercator), autentyczne malowania linii, rzutowanie Ziemi 3D i orbita ISS.",
+            "size_kb": 35,
             "download_url": "https://raw.githubusercontent.com/kawaczek/brik/main/store/modules/004_mod_air_radar.py",
-            "controls": "D-Pad: Obrót Globusa | L1/R1: Zoom | A: Wybierz Samolot",
-            "featured": false,
+            "controls": "L1/R1: Namierz Cel | A: Zdjęcie & Dane | X/Y: Zoom | B: Baza GPS | L2/R2: Styl Mapy",
+            "featured": true,
             "screenshot": "docs/screenshots/004_mod_air_radar.png"
         },
         {
@@ -407,15 +413,15 @@
             "num": "027",
             "id": "027_mod_store",
             "legacy_id": "mod_store",
-            "name": "027 // BrickStore GitHub App Store",
-            "version": "1.0.0",
+            "name": "027 // BrickStore & System Upgrade",
+            "version": "2.2.0",
             "category": "Narzędzia & Net",
             "author": "kawaczek",
-            "description": "Oficjalny wbudowany sklep aplikacji OTA z instalacją jednym przyciskiem przez Wi-Fi z GitHuba.",
-            "size_kb": 19,
+            "description": "Oficjalny CyberStore: instalacja i aktualizacja modułów oraz pełny upgrade online systemu BrickDeck OS przez Wi-Fi z GitHub.",
+            "size_kb": 26,
             "download_url": "https://raw.githubusercontent.com/kawaczek/brik/main/store/modules/027_mod_store.py",
-            "controls": "D-Pad: Przeglądaj Katalog | A: Zainstaluj Moduł | Y: Odśwież Sklep",
-            "featured": false,
+            "controls": "L1/R1: Kategoria/Upgrade | A: Instaluj/Update | X: Aktualizuj Wszystko | Y: GitHub",
+            "featured": true,
             "screenshot": "docs/screenshots/027_mod_store.png"
         },
         {

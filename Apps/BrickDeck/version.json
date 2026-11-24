@@ -1,0 +1,24 @@
+{
+    "app_name": "BrickDeck OS",
+    "version": "2.2.0",
+    "release_date": "2026-11-24",
+    "git_branch": "main",
+    "github_repo": "kawaczek/brik",
+    "changelog": "Online Update & Upgrade Engine dla systemu i osobnych modułów, mapy HD Web Mercator i radar ADS-B",
+    "core_files": [
+        "Apps/BrickDeck/brickdeck.py",
+        "Apps/BrickDeck/launch.sh",
+        "Apps/BrickDeck/core/canvas.py",
+        "Apps/BrickDeck/core/display_driver.py",
+        "Apps/BrickDeck/core/input_manager.py",
+        "Apps/BrickDeck/core/module_base.py",
+        "Apps/BrickDeck/core/theme.py",
+        "Apps/BrickDeck/core/i18n.py",
+        "Apps/BrickDeck/core/qr_engine.py",
+        "Apps/BrickDeck/core/survival_engine.py",
+        "Apps/BrickDeck/modules/027_mod_store.py",
+        "Apps/BrickDeck/version.json",
+        "store/registry.json",
+        "version.json"
+    ]
+}

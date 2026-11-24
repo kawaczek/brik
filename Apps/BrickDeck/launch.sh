@@ -28,8 +28,17 @@ if [ -z "$PYTHON" ]; then
 fi
 
 echo "Using Python: $PYTHON" >> "$LOG_FILE"
-$PYTHON "$APP_DIR/brickdeck.py" --mode fb >> "$LOG_FILE" 2>&1
 
-EXIT_CODE=$?
-echo "=== BrickDeck stopped with code $EXIT_CODE at $(date) ===" >> "$LOG_FILE"
-exit $EXIT_CODE
+# Main execution loop with automatic restart on update/upgrade (Exit code 42)
+while true; do
+    echo "=== Starting BrickDeck OS $(date) ===" >> "$LOG_FILE"
+    $PYTHON "$APP_DIR/brickdeck.py" --mode fb >> "$LOG_FILE" 2>&1
+    EXIT_CODE=$?
+    if [ $EXIT_CODE -eq 42 ]; then
+        echo "=== Restart requested by BrickDeck Online Updater (exit 42) at $(date) ===" >> "$LOG_FILE"
+        sleep 1
+        continue
+    fi
+    echo "=== BrickDeck stopped with code $EXIT_CODE at $(date) ===" >> "$LOG_FILE"
+    exit $EXIT_CODE
+done

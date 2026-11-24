@@ -18,10 +18,10 @@
             "version": "1.0.0",
             "category": "Gry & 3D",
             "author": "kawaczek",
-            "description": "Trójwymiarowy silnik Raycasting 3D czasu rzeczywistego (60 FPS). Eksploracja neonowych korytarzy, taktyczna minimapa i zbieranie cyber-dyskietek.",
+            "description": "Trójwymiarowy silnik Raycasting 3D czasu rzeczywistego (60 FPS). Eksploracja korytarzy, zoom minimapy, skalowalne duże czcionki (3.2\") i menu konfiguracji.",
             "size_kb": 22,
             "download_url": "https://raw.githubusercontent.com/kawaczek/brik/main/store/modules/mod_raycaster.py",
-            "controls": "D-Pad: Krok/Obrót | A: Akcja | X: Minimapa | B: Sprint",
+            "controls": "D-Pad: Ruch | Y: Ustawienia/Czcionka | X: Radar | L1/R1: Zoom Mapy | A: Szukaj | B: Sprint",
             "featured": true,
             "screenshot": "docs/screenshots/mod_raycaster.png"
         },

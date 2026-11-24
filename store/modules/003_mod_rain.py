@@ -728,18 +728,17 @@ class RainRadarModule(BaseModule):
         draw.rounded_rectangle([rx, ry, rx + rw, ry + rh], radius=8, fill=(12, 18, 30), outline=(0, 240, 255), width=2)
 
         f_hud = get_font(12, bold=True)
-        draw.text((rx + 16, ry + 14), "📍 GORZÓW WIELKOPOLSKI", fill=(255, 215, 60), font=f_hud)
+        draw.text((rx + 16, ry + 14), "● GORZÓW WIELKOPOLSKI", fill=(255, 215, 60), font=f_hud)
 
         temp_col = (80, 195, 255) if self.temp < 5 else (255, 170, 0)
-        draw.text((rx + 240, ry + 14), f"🌡️ {self.temp:+.1f}°C (odcz. {self.apparent_temp:+.1f}°C)", fill=temp_col, font=f_hud)
+        draw.text((rx + 240, ry + 14), f"TEMP: {self.temp:+.1f}°C (odcz. {self.apparent_temp:+.1f}°C)", fill=temp_col, font=f_hud)
 
-        cond_icon = "🌧️" if self.is_raining else ("❄️" if self.is_snowing else "☁️")
-        draw.text((rx + 480, ry + 14), f"{cond_icon} {self.weather_desc.upper()}", fill=(245, 250, 255), font=f_hud)
+        draw.text((rx + 480, ry + 14), f"AURA: {self.weather_desc.upper()}", fill=(245, 250, 255), font=f_hud)
 
-        rain_txt = f"💧 {self.precip_mmh:.1f} mm/h (Pada deszcz!)" if self.is_raining else "💧 0.0 mm/h (SUCHO)"
+        rain_txt = f"OPAD: {self.precip_mmh:.1f} mm/h (Pada deszcz!)" if self.is_raining else "OPAD: 0.0 mm/h (SUCHO)"
         draw.text((rx + 700, ry + 14), rain_txt, fill=(0, 240, 255) if self.is_raining else (160, 180, 205), font=f_hud)
 
-        live_str = f"🟢 LIVE ({self.station_time_str})" if self.is_live else "⚪ OFFLINE"
+        live_str = f"● LIVE ({self.station_time_str})" if self.is_live else "○ OFFLINE"
         draw.text((rx + rw - 130, ry + 14), live_str, fill=(0, 255, 180) if self.is_live else (150, 160, 175), font=f_hud)
 
     # -------------------------------------------------------------------------
@@ -790,15 +789,15 @@ class RainRadarModule(BaseModule):
             nearest_town, dist, town_lore = min(town_distances, key=lambda t: t[1])
 
             if under_cloud:
-                msg1 = "🌧️ „Wszedłem w zasięg chmury radarowej! Z góry pada deszcz, otwieram parasolkę!”"
+                msg1 = "„Wszedłem w zasięg chmury radarowej! Z góry pada deszcz, otwieram parasolkę!”"
                 msg2 = "Radar wykrywa opad w tym sektorze. Klawisze D-Pad pozwalają wyjść poza chmurę."
                 prop_status = "Stan: PARASOLKA OTWARTA POD CHMURĄ RADAROWĄ"
             elif dist < 65:
-                msg1 = f"🏰 „Wkraczam do rejonu: {nearest_town}! {town_lore}”"
+                msg1 = f"„Wkraczam do rejonu: {nearest_town}! {town_lore}”"
                 msg2 = f"Koordynaty GPS: ({int(self.hero_map_x)}, {int(self.hero_map_y)}). Wiatr {self.wind_speed:.1f} km/h z {_compass_name(self.wind_dir)}."
                 prop_status = f"Lokacja: W POBLIŻU {nearest_town.upper()}"
             else:
-                msg1 = "🌲 „Przemierzam szlaki Ziemi Lubuskiej wzdłuż rzek. Wiatraki kręcą się na wzgórzach.”"
+                msg1 = "„Przemierzam szlaki Ziemi Lubuskiej wzdłuż rzek. Wiatraki kręcą się na wzgórzach.”"
                 msg2 = f"D-Pad pozwala swobodnie chodzić po mapie! Klawisz [X] powraca na bulwar Gorzowa."
                 prop_status = f"Eksploracja: TRASA POLNA ({int(self.hero_map_x)}, {int(self.hero_map_y)})"
 
@@ -826,7 +825,7 @@ class RainRadarModule(BaseModule):
 
         draw.text((cx, by + 18), msg1, fill=(255, 255, 255), font=f_diag)
         draw.text((cx, by + 46), msg2, fill=(195, 215, 245), font=f_sub)
-        draw.text((cx, by + 76), f"✨ {prop_status}", fill=(0, 240, 255), font=f_bold)
+        draw.text((cx, by + 76), f"► {prop_status}", fill=(0, 240, 255), font=f_bold)
 
         # Telemetry pills bar
         draw.line([(cx, by + 104), (bx + bw - 18, by + 104)], fill=(45, 65, 95), width=1)
@@ -843,7 +842,7 @@ class RainRadarModule(BaseModule):
 
         # Controls Hint Footer
         draw.line([(bx + 14, by + bh - 38), (bx + bw - 14, by + bh - 38)], fill=(45, 65, 95), width=1)
-        hint_txt = "🎮 [D-PAD] CHODŹ POSTACIĄ!   |   [X] PRZEŁĄCZ: ULICA 2D ⮀ MAPA RPG   |   [SELECT] ODŚWIEŻ STACJĘ"
+        hint_txt = "► [D-PAD] CHODŹ POSTACIĄ!   |   [X] PRZEŁĄCZ: ULICA 2D ◄► MAPA RPG   |   [SELECT] ODŚWIEŻ STACJĘ"
         draw.text((bx + 20, by + bh - 28), hint_txt, fill=(0, 255, 180), font=get_font(11, bold=True))
 
     def handle_input(self, event: str) -> bool:

@@ -632,14 +632,19 @@
         }
 
         try {
-          const fontResp = await fetch("https://cdn.jsdelivr.net/fontsource/fonts/fira-code@latest/latin-500-normal.ttf");
+          // 1. Try local full DejaVu Sans font with 100% complete Polish unicode support
+          let fontResp = await fetch("assets/fonts/default.ttf?v=" + Date.now());
+          if (!fontResp.ok) {
+            // 2. Fallback to CDN DejaVu Sans
+            fontResp = await fetch("https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans.ttf");
+          }
           if (fontResp.ok) {
             const fontBuf = await fontResp.arrayBuffer();
             pyodide.FS.writeFile("/default.ttf", new Uint8Array(fontBuf));
-            log("[+] Załadowano wektorową czcionkę TrueType Fira Code do Pyodide.");
+            log("[+] Załadowano pełną czcionkę TrueType z polskimi znakami (DejaVu Sans).");
           }
         } catch(fErr) {
-          log("[*] Używam domyślnej czcionki Pillow.");
+          log("[*] Czcionka domyślna Pillow aktywna.");
         }
 
         drawLoading("Wstrzykiwanie środowiska BrickDeck Core...");

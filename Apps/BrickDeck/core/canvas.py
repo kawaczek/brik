@@ -27,9 +27,11 @@ def get_font(size: int = 14, bold: bool = False) -> ImageFont.ImageFont:
     if key in _FONT_CACHE:
         return _FONT_CACHE[key]
 
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
     font_candidates = [
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        os.path.join(repo_root, "assets/fonts/default-bold.ttf") if bold else os.path.join(repo_root, "assets/fonts/default.ttf"),
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
         "/mnt/SDCARD/System/fonts/default.ttf",
         "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf"
     ]

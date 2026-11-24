@@ -52,6 +52,123 @@
             "screenshot": "docs/screenshots/mod_lockpick.png"
         },
         {
+            "id": "mod_asteroids",
+            "name": "Vector Space Combat 360°",
+            "version": "1.0.0",
+            "category": "Gry & 3D",
+            "author": "kawaczek",
+            "description": "Wektorowy klimat automatów arcade z lat 80. Obrót statku 360°, bezwładność newtonowska, lasery i rozbijanie pasów asteroid.",
+            "size_kb": 18,
+            "download_url": "https://raw.githubusercontent.com/kawaczek/brik/main/store/modules/mod_asteroids.py",
+            "controls": "D-Pad: Obrót / Ciąg | A: Laser | B: Hiperprzestrzeń | X: Reset",
+            "featured": true,
+            "screenshot": "docs/screenshots/mod_asteroids.png"
+        },
+        {
+            "id": "mod_synth",
+            "name": "8-Bit Cyber Synth & Tracker",
+            "version": "1.0.0",
+            "category": "Audio & Radio",
+            "author": "kawaczek",
+            "description": "16-krokowy sekwencer perkusyjny i syntezator chiptune stereo. Generowanie fal NES/GameBoy, oscyloskop CRT w czasie rzeczywistym.",
+            "size_kb": 20,
+            "download_url": "https://raw.githubusercontent.com/kawaczek/brik/main/store/modules/mod_synth.py",
+            "controls": "D-Pad: Siatka | A: Nutka WŁ/WYŁ | X: Play/Pauza | L1/R1: Tempo BPM",
+            "featured": true,
+            "screenshot": "docs/screenshots/mod_synth.png"
+        },
+        {
+            "id": "mod_life",
+            "name": "Conway's Game of Life",
+            "version": "1.0.0",
+            "category": "Nauka & Kosmos",
+            "author": "kawaczek",
+            "description": "Symulator automatu komórkowego Conwaya (B3/S23). Biblioteka struktur Gosper Gun, gliderów i generator losowej zupy pierwotnej.",
+            "size_kb": 16,
+            "download_url": "https://raw.githubusercontent.com/kawaczek/brik/main/store/modules/mod_life.py",
+            "controls": "A: Rysuj komórkę | X: Start/Pauza | Y: Gosper Gun | B: Losowa zupa",
+            "featured": false,
+            "screenshot": "docs/screenshots/mod_life.png"
+        },
+        {
+            "id": "mod_mandelbrot",
+            "name": "Mandelbrot & Julia Fractals",
+            "version": "1.0.0",
+            "category": "Nauka & Kosmos",
+            "author": "kawaczek",
+            "description": "Eksplorator fraktali Mandelbrota i Julii w płaszczyźnie zespolonej. Płynny zoom, cyberpunkowe palety barw i telemetria matematyczna.",
+            "size_kb": 17,
+            "download_url": "https://raw.githubusercontent.com/kawaczek/brik/main/store/modules/mod_mandelbrot.py",
+            "controls": "D-Pad: Nawigacja | A: Zoom In | B: Zoom Out | X: Mandelbrot / Julia",
+            "featured": false,
+            "screenshot": "docs/screenshots/mod_mandelbrot.png"
+        },
+        {
+            "id": "mod_auth",
+            "name": "Tactical 2FA TOTP Vault",
+            "version": "1.0.0",
+            "category": "Cyber & Hacking",
+            "author": "kawaczek",
+            "description": "Sprzętowy generator tokenów jednorazowych TOTP (RFC 6238) odcięty od sieci (air-gapped). Kołowy wskaźnik ważności kodu 30s.",
+            "size_kb": 18,
+            "download_url": "https://raw.githubusercontent.com/kawaczek/brik/main/store/modules/mod_auth.py",
+            "controls": "D-Pad Góra/Dół: Wybór konta | A: Pokaż Secret | X: Kopiuj kod",
+            "featured": true,
+            "screenshot": "docs/screenshots/mod_auth.png"
+        },
+        {
+            "id": "mod_dice",
+            "name": "RPG Companion & Entropy Dice",
+            "version": "1.0.0",
+            "category": "Narzędzia & Net",
+            "author": "kawaczek",
+            "description": "Kieszonkowy zestaw kości RPG (k4 do k100) oparty o entropię /dev/urandom. Wizualizacja brył wielościennych 3D, historia i modyfikatory.",
+            "size_kb": 18,
+            "download_url": "https://raw.githubusercontent.com/kawaczek/brik/main/store/modules/mod_dice.py",
+            "controls": "D-Pad Lewo/Prawo: Wybór kości | A: Rzut | L1/R1: Modyfikator +/- | X: Wyczyść",
+            "featured": false,
+            "screenshot": "docs/screenshots/mod_dice.png"
+        },
+        {
+            "id": "mod_tamagotchi",
+            "name": "CyberPet Pocket Virtual Monster",
+            "version": "1.0.0",
+            "category": "Gry & 3D",
+            "author": "kawaczek",
+            "description": "Wirtualny cyber-bot / potworek na ekranie. Karmienie, zabawa na przyciskach ABXY, poziom baterii, RAM i ewolucja z zapisem na SD.",
+            "size_kb": 19,
+            "download_url": "https://raw.githubusercontent.com/kawaczek/brik/main/store/modules/mod_tamagotchi.py",
+            "controls": "D-Pad: Wybór akcji | A: Wykonaj | X: Minigra | B: Status",
+            "featured": true,
+            "screenshot": "docs/screenshots/mod_tamagotchi.png"
+        },
+        {
+            "id": "mod_pipe_hack",
+            "name": "Circuit Conduit Hacker",
+            "version": "1.0.0",
+            "category": "Gry & 3D",
+            "author": "kawaczek",
+            "description": "Gra logiczno-zręcznościowa w stylu Pipemania / BioShock. Obracanie węzłów magistrali logicznej na czas, by doprowadzić pakiet danych do CPU.",
+            "size_kb": 19,
+            "download_url": "https://raw.githubusercontent.com/kawaczek/brik/main/store/modules/mod_pipe_hack.py",
+            "controls": "D-Pad: Kursor | A: Obrót złącza o 90° | X: Przyspiesz impuls | B: Reset",
+            "featured": false,
+            "screenshot": "docs/screenshots/mod_pipe_hack.png"
+        },
+        {
+            "id": "mod_lunar_lander",
+            "name": "Apollo Cyber Lander",
+            "version": "1.0.0",
+            "category": "Gry & 3D",
+            "author": "kawaczek",
+            "description": "Fizyczny symulator lądowania lądownikiem kosmicznym 2D na Moonbase Alpha. Ciąg silnika pod A, wektoryzacja RCS, grawitacja i miękkie lądowanie < 2m/s.",
+            "size_kb": 21,
+            "download_url": "https://raw.githubusercontent.com/kawaczek/brik/main/store/modules/mod_lunar_lander.py",
+            "controls": "D-Pad Lewo/Prawo: Kąt RCS | A: Główny silnik | Y: Reset symulacji",
+            "featured": true,
+            "screenshot": "docs/screenshots/mod_lunar_lander.png"
+        },
+        {
             "id": "mod_sandbox",
             "name": "Powder & Physics Sandbox",
             "version": "1.1.0",
@@ -78,7 +195,7 @@
             "screenshot": "docs/screenshots/mod_clock.png"
         },
         {
-            "id": "mod_mzk_map.py",
+            "id": "mod_mzk_map",
             "name": "Gorzów Live Transit Fleet Radar",
             "version": "1.0.0",
             "category": "Narzędzia & Net",
@@ -401,45 +518,6 @@
             "controls": "D-Pad: Wybór | L1/R1: Kategoria | A: Instaluj | X: Usuń | Y: Odśwież",
             "featured": true,
             "screenshot": "docs/screenshots/mod_store.png"
-        },
-        {
-            "id": "mod_tamagotchi",
-            "name": "CyberPet Virtual Monster",
-            "version": "1.0.0",
-            "category": "Gry & 3D",
-            "author": "kawaczek",
-            "description": "Kieszonkowy wirtualny cyber-bot na ekranie konsoli. Karmienie, czyszczenie, minigry i ewolucja.",
-            "size_kb": 18,
-            "download_url": "https://raw.githubusercontent.com/kawaczek/brik/main/store/modules/mod_tamagotchi.py",
-            "controls": "D-Pad: Akcja | A: Wybierz | X: Minigra | B: Status",
-            "featured": true,
-            "screenshot": "docs/screenshots/mod_tamagotchi.png"
-        },
-        {
-            "id": "mod_pipe_hack",
-            "name": "Circuit Conduit & Pipe Hacker",
-            "version": "1.0.0",
-            "category": "Gry & 3D",
-            "author": "kawaczek",
-            "description": "Gra logiczno-zręcznościowa na czas w stylu BioShock / Pipemania: obracanie złączy magistrali, by doprowadzić impuls danych do rdzenia.",
-            "size_kb": 19,
-            "download_url": "https://raw.githubusercontent.com/kawaczek/brik/main/store/modules/mod_pipe_hack.py",
-            "controls": "D-Pad: Kursor węzła | A: Obróć złącze | X: Test sygnału | Y: Nowa matryca",
-            "featured": true,
-            "screenshot": "docs/screenshots/mod_pipe_hack.png"
-        },
-        {
-            "id": "mod_lunar_lander",
-            "name": "Apollo Cyber Lander 2D",
-            "version": "1.0.0",
-            "category": "Gry & 3D",
-            "author": "kawaczek",
-            "description": "Fizyczny symulator lądowania na obcej planecie 2D: ciąg główny pod A, silniki manewrowe RCS D-Padem i lądowanie < 2 m/s na platformie.",
-            "size_kb": 18,
-            "download_url": "https://raw.githubusercontent.com/kawaczek/brik/main/store/modules/mod_lunar_lander.py",
-            "controls": "A: Ciąg główny | D-Pad: Obrót RCS | Y: Nowe lądowanie",
-            "featured": true,
-            "screenshot": "docs/screenshots/mod_lunar_lander.png"
         }
     ]
 }
